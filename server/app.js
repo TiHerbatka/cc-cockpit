@@ -10,6 +10,7 @@ const recent = require('./recent');
 const { findTranscriptPath, createTailer } = require('./transcript');
 const { normalize } = require('./normalize');
 const { readTopics } = require('./topics');
+const uploads = require('./uploads');
 
 const DEFAULT_PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -113,6 +114,35 @@ function createApp({ spawnPty, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot = pr
           res.writeHead(e.status || 400, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: String(e.message || e) }));
         }
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && urlPath === '/api/upload-image') {
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        const fail = (code, error) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error })); };
+        let m; try { m = JSON.parse(body); } catch { return fail(400, 'bad json'); }
+        const s = registry.get(m && m.id);
+        if (!s) return fail(400, 'unknown session');
+        if (!uploads.isImageMime(m.mime)) return fail(400, 'not an image');
+        const buf = Buffer.from(String(m.dataBase64 || ''), 'base64');
+        if (!buf.length) return fail(400, 'no data');
+        if (buf.length > uploads.MAX_BYTES) return fail(413, 'too large');
+        try {
+          const dir = path.join(s.cwd, uploads.UPLOAD_DIRNAME);
+          fs.mkdirSync(dir, { recursive: true });
+          const ext = uploads.extFromMime(m.mime);
+          let desired = uploads.safeName(m.name);
+          if (desired && !path.extname(desired)) desired += ext;
+          if (!desired) desired = uploads.buildAutoName(new Date(), ext);
+          const name = uploads.resolveUploadName(dir, desired);
+          const full = path.join(dir, name);
+          fs.writeFileSync(full, buf);
+          res.writeHead(201, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ path: full, name }));
+        } catch (e) { fail(500, String(e && e.message || e)); }
       });
       return;
     }
@@ -234,6 +264,13 @@ function createApp({ spawnPty, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot = pr
           const file = path.join(s.cwd, name);
           if (fs.existsSync(file)) openFile(file);
           else ws.send(JSON.stringify({ type: 'error', message: `${name} not found in ${s.cwd}` }));
+        }
+      } else if (m.type === 'open-image') {
+        const s = registry.get(m.id);
+        if (s && typeof m.path === 'string' && uploads.isWithinUploads(s.cwd, m.path) && fs.existsSync(m.path)) {
+          openFile(m.path);
+        } else {
+          ws.send(JSON.stringify({ type: 'error', message: 'cannot open image' }));
         }
       } else if (m.type === 'resume') {
         try { registry.create(m.cwd, { resumeId: m.id }); }

@@ -87,7 +87,24 @@ const modeOf = (id) => modeById.get(id) || 'gui'; // GUI is the default mode
 let guiWatchedId = null;                 // session currently gui-attached (tailing)
 
 // One GUI controller, mounted once; re-pointed at the focused session.
-const gui = mountGui(guiPaneEl, { onSend: (text) => composeSend(text) });
+const gui = mountGui(guiPaneEl, {
+  onSend: (text) => composeSend(text),
+  onOpenImage: (p) => { if (focusedId) ws.send(JSON.stringify({ type: 'open-image', id: focusedId, path: p })); },
+  onUpload: async (file) => {
+    if (!focusedId) { errorCenter.add('Upload: no active session'); throw new Error('no session'); }
+    let dataBase64;
+    try { dataBase64 = await readFileAsBase64(file); }
+    catch (e) { errorCenter.add('Upload: failed to read file — ' + (e && e.message || e)); throw e; }
+    const res = await fetch('/api/upload-image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: focusedId, name: file.name || undefined, mime: file.type, dataBase64 }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) { errorCenter.add('Upload: ' + (json.error || 'HTTP ' + res.status)); throw new Error('upload failed'); }
+    return json;
+  },
+});
 
 // Sending a compose message to a *freshly opened* session is unreliable: the text
 // reaches Claude's input box but the Enter is dropped while the TUI is still
@@ -116,6 +133,16 @@ function composeSend(text) {
   clearPendingSubmit();
   pendingSubmit = { id, text: text.trim(), tries: 0 };
   scheduleSubmitNudge();
+}
+
+// Read a File/Blob as a base64 string (the raw payload, without the data-URL prefix).
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => { resolve(reader.result.split(',')[1]); };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 function detachGui() {

@@ -190,3 +190,11 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .err-stack-btn { flex: 0 0 auto; background: #3a3d41; color: #ccc; border: none; border-radius: 3px; padding: 1px 6px; cursor: pointer; font-size: 11px; }
 .err-stack-btn:hover { background: #4a4d51; }
 .err-stack { white-space: pre-wrap; word-break: break-word; font-family: Consolas, monospace; font-size: 12px; color: #ccc; overflow: auto; flex: 1; min-height: 0; }
+/* Rich compose editor (contenteditable, replaces textarea) */
+.gui-compose-input { flex: 1; min-height: 38px; max-height: 200px; overflow-y: auto; background: #1e1e1e; border: 1px solid #3c3c3c; color: #ddd; padding: 6px 8px; border-radius: 4px; font-family: inherit; font-size: 13px; white-space: pre-wrap; word-break: break-word; outline: none; cursor: text; line-height: 1.5; }
+.gui-compose-input:empty::before { content: attr(data-placeholder); color: #555; pointer-events: none; }
+.gui-compose-input:focus { border-color: #555; }
+/* Image token chip shown inline in the editor */
+.img-token { display: inline-block; background: #1e3a50; color: #9cdcfe; border: 1px solid #3a6080; border-radius: 3px; padding: 1px 6px; font-size: 12px; user-select: none; cursor: default; vertical-align: middle; white-space: nowrap; }
+/* Context menu for image tokens (reuses .ctx-item for rows) */
+.img-ctx-menu { position: fixed; z-index: 100; background: #2d2d30; border: 1px solid #3c3c3c; border-radius: 4px; padding: 4px; min-width: 160px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }

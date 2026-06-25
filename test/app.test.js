@@ -667,3 +667,71 @@ test('GET /api/projects includes lastActivity per project', async () => {
 
   await new Promise((r) => server.close(r));
 });
+
+test('POST /api/upload-image saves the file and auto-names it; rejects non-image/unknown-id', async () => {
+  const sessionCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-upload-'));
+  const { factory } = fakePtyFactory();
+  const { server } = createApp({ spawnPty: factory });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
+  ws.send(JSON.stringify({ type: 'create', cwd: sessionCwd }));
+  const id = (await created).sessions[0].id;
+
+  const png = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
+  const ok = await postJson(port, '/api/upload-image', { id, mime: 'image/png', dataBase64: png });
+  assert.strictEqual(ok.status, 201);
+  assert.ok(path.isAbsolute(ok.json.path));
+  assert.ok(fs.existsSync(ok.json.path));
+  assert.match(ok.json.name, /^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}\.png$/);
+  assert.strictEqual(path.dirname(ok.json.path), path.join(sessionCwd, 'uploaded-images'));
+
+  const badMime = await postJson(port, '/api/upload-image', { id, mime: 'text/plain', dataBase64: png });
+  assert.strictEqual(badMime.status, 400);
+  const badId = await postJson(port, '/api/upload-image', { id: 'nope', mime: 'image/png', dataBase64: png });
+  assert.strictEqual(badId.status, 400);
+
+  ws.close();
+  await new Promise((r) => server.close(r));
+  fs.rmSync(sessionCwd, { recursive: true, force: true });
+});
+
+test('WS open-image opens the file via the injected opener; outside path -> error', async () => {
+  const sessionCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-oi-'));
+  const uploadDir = path.join(sessionCwd, 'uploaded-images');
+  fs.mkdirSync(uploadDir, { recursive: true });
+  const insidePath = path.join(uploadDir, 'x.png');
+  fs.writeFileSync(insidePath, 'fake png');
+
+  const calls = [];
+  const { factory } = fakePtyFactory();
+  const { server } = createApp({ spawnPty: factory, openFile: (p) => calls.push(p) });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
+  ws.send(JSON.stringify({ type: 'create', cwd: sessionCwd }));
+  const id = (await created).sessions[0].id;
+
+  // inside path -> openFile called; use attach ordering to prove it was processed
+  ws.send(JSON.stringify({ type: 'open-image', id, path: insidePath }));
+  const attached = nextMessage(ws, (m) => m.type === 'attached' && m.id === id);
+  ws.send(JSON.stringify({ type: 'attach', id }));
+  await attached;
+  assert.deepStrictEqual(calls, [insidePath]);
+
+  // outside path -> error reply; openFile not called again
+  const errMsg = nextMessage(ws, (m) => m.type === 'error');
+  ws.send(JSON.stringify({ type: 'open-image', id, path: path.join(sessionCwd, 'secret.txt') }));
+  await errMsg;
+  assert.deepStrictEqual(calls, [insidePath]);
+
+  ws.close();
+  await new Promise((r) => server.close(r));
+  fs.rmSync(sessionCwd, { recursive: true, force: true });
+});

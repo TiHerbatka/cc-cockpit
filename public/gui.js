@@ -128,13 +128,13 @@ function mountGui(container, handlers) {
     + '</div>'
     + '<div class="gui-log"></div>'
     + '<form class="gui-compose">'
-    + '<textarea rows="2" placeholder="Message this session…  (Enter to send · Shift+Enter for newline)"></textarea>'
+    + '<div class="gui-compose-input" contenteditable="true" data-placeholder="Message this session…  (Enter to send · Shift+Enter for newline)"></div>'
     + '<button type="submit">Send</button>'
     + '</form>';
   const statusEl = container.querySelector('.gui-status');
   const logEl = container.querySelector('.gui-log');
   const form = container.querySelector('.gui-compose');
-  const ta = form.querySelector('textarea');
+  const editor = form.querySelector('.gui-compose-input');
 
   // ---- native todos panel (D) ----
   const todosPanel = container.querySelector('.gui-todos-panel');
@@ -210,23 +210,164 @@ function mountGui(container, handlers) {
   const permTool = permEl.querySelector('.perm-tool');
   const permInput = permEl.querySelector('.perm-input');
 
+  // ---- Rich compose editor ---------------------------------------------------
+  let tokenCounter = 0;
+  let imgCtxMenu = null;
+
+  function closeImgCtxMenu() {
+    if (imgCtxMenu) { imgCtxMenu.remove(); imgCtxMenu = null; }
+  }
+
+  // Walk the editor's DOM and produce a flat descriptor array.
+  // text node → {type:'text'}, BR → {type:'br'}, .img-token → {type:'token'},
+  // DIV/P block wrapper → {type:'br'} then recurse children.
+  function collectDescriptors(node) {
+    const out = [];
+    for (const child of node.childNodes) {
+      if (child.nodeType === 3) {
+        out.push({ type: 'text', text: child.textContent });
+      } else if (child.nodeName === 'BR') {
+        out.push({ type: 'br' });
+      } else if (child.nodeType === 1 && child.classList.contains('img-token')) {
+        out.push({ type: 'token', path: child.dataset.path });
+      } else if (child.nodeName === 'DIV' || child.nodeName === 'P') {
+        out.push({ type: 'br' });
+        out.push(...collectDescriptors(child));
+      } else if (child.nodeType === 1) {
+        out.push(...collectDescriptors(child));
+      }
+    }
+    return out;
+  }
+
+  // Insert an image token span + trailing space at the current caret inside editor.
+  function insertTokenAtCaret(path, name) {
+    tokenCounter += 1;
+    const span = document.createElement('span');
+    span.className = 'img-token';
+    span.contentEditable = 'false';
+    span.draggable = true;
+    span.dataset.path = path;
+    span.title = name || path;
+    span.textContent = '[Image #' + tokenCounter + ']';
+    const space = document.createTextNode(' ');
+    const sel = window.getSelection();
+    const inEditor = sel && sel.rangeCount && editor.contains(sel.getRangeAt(0).commonAncestorContainer);
+    if (inEditor) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(span);
+      const r2 = document.createRange();
+      r2.setStartAfter(span);
+      r2.collapse(true);
+      r2.insertNode(space);
+      r2.setStartAfter(space);
+      r2.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r2);
+    } else {
+      editor.appendChild(span);
+      editor.appendChild(space);
+    }
+    editor.focus();
+  }
+
+  // Upload a File/Blob via handlers.onUpload, then insert a token at savedRange.
+  async function uploadAndInsert(file, savedRange) {
+    if (!handlers.onUpload) return;
+    let result;
+    try {
+      result = await handlers.onUpload(file);
+    } catch {
+      return; // error already routed to errorCenter by app.js
+    }
+    if (savedRange) {
+      try {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+      } catch { /* range may be stale after async gap */ }
+    }
+    insertTokenAtCaret(result.path, result.name);
+  }
+
   const submit = () => {
-    const text = ta.value;
+    const descriptors = collectDescriptors(editor);
+    const text = window.serializeDescriptors(descriptors);
     if (!text.trim()) return;
     handlers.onSend(text);
-    ta.value = '';
+    editor.innerHTML = '';
+    tokenCounter = 0;
   };
   form.addEventListener('submit', (e) => { e.preventDefault(); submit(); });
-  ta.addEventListener('keydown', (e) => {
+  editor.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+    else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); }
   });
+  editor.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const items = [...(e.clipboardData.items || [])];
+    const imgItem = items.find((it) => it.type.startsWith('image/'));
+    if (imgItem) {
+      const sel = window.getSelection();
+      const savedRange = (sel && sel.rangeCount) ? sel.getRangeAt(0).cloneRange() : null;
+      uploadAndInsert(imgItem.getAsFile(), savedRange);
+      return;
+    }
+    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+  });
+  editor.addEventListener('dragover', (e) => { e.preventDefault(); });
+  editor.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const files = [...(e.dataTransfer.files || [])];
+    const imgFile = files.find((f) => f.type.startsWith('image/'));
+    if (!imgFile) return;
+    // Place caret at the drop point before the async upload begins.
+    if (document.caretRangeFromPoint) {
+      const cr = document.caretRangeFromPoint(e.clientX, e.clientY);
+      if (cr) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(cr); }
+    } else if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
+      if (pos) {
+        const r = document.createRange();
+        r.setStart(pos.offsetNode, pos.offset);
+        r.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+    }
+    const sel = window.getSelection();
+    const savedRange = (sel && sel.rangeCount) ? sel.getRangeAt(0).cloneRange() : null;
+    uploadAndInsert(imgFile, savedRange);
+  });
+  editor.addEventListener('contextmenu', (e) => {
+    const token = e.target.closest('.img-token');
+    if (!token) return; // let native menu show for plain text
+    e.preventDefault();
+    closeImgCtxMenu();
+    const menu = document.createElement('div');
+    menu.className = 'img-ctx-menu';
+    const btn = document.createElement('button');
+    btn.className = 'ctx-item';
+    btn.textContent = 'Open in default app';
+    btn.onclick = () => { closeImgCtxMenu(); if (handlers.onOpenImage) handlers.onOpenImage(token.dataset.path); };
+    menu.appendChild(btn);
+    document.body.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = Math.min(e.clientX, window.innerWidth - rect.width - 4) + 'px';
+    menu.style.top = Math.min(e.clientY, window.innerHeight - rect.height - 4) + 'px';
+    imgCtxMenu = menu;
+  });
+  document.addEventListener('click', closeImgCtxMenu);
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeImgCtxMenu(); });
 
   const hidePerm = () => { permEl.hidden = true; };
 
   return {
     update(model) { renderStatus(statusEl, model); renderLog(logEl, model); renderTodosPanel(model); },
     clear() { statusEl.innerHTML = ''; logEl.innerHTML = ''; hidePerm(); },
-    focusCompose() { ta.focus(); },
+    focusCompose() { editor.focus(); },
     // Mirror a native permission prompt. The buttons map to Claude's numbered
     // options (1=Allow, 2=Allow+don't-ask, 3=Deny); onAnswer sends the keystroke.
     showPermission(req, onAnswer) {
