@@ -1,0 +1,5 @@
+node_modules/
+public/vendor/
+hooks/cockpit-settings.generated.json
+.playwright-mcp/
+temp/
