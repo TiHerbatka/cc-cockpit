@@ -17,14 +17,14 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 
 ## A. Priorities (in order)
 
-- [ ] A1. [TOP PRIORITY] Image paste / upload into a session — let the user attach images directly instead of save-file-then-copy-path.
-  - [ ] A1.1. In GUI mode, paste from clipboard (and ideally drag-and-drop a file) onto the compose box attaches an image.
-  - [ ] A1.2. The cockpit saves the image into `<project-cwd>/uploaded-images/` (create the dir if missing) — clipboard images get persisted as a side win.
-  - [ ] A1.3. The saved file's path is inserted into the prompt at the exact spot where the user pasted/dropped it (Claude receives the path reference).
-  - [ ] A1.4. Filename: use the clipboard's name if present; else auto-generate `YYYY-MM-DD HH-MM-SS.<ext>` (ext from blob mime; default `.png`).
-  - [ ] A1.5. Impl sketch: client `paste`/`drop` listeners on the compose textarea → read image blob → POST `upload-image {id, name?, dataBase64}` → server resolves the session cwd, writes `uploaded-images/<name>`, returns the absolute path → client inserts the path at the cursor. Handle multiple images.
-  - [ ] A1.6. Flow: brainstorm (quick — it's concrete) → spec → plan → build → verify (paste a real screenshot, confirm file saved + path inserted + Claude can read it).
-  - [ ] A1.7. [deferred follow-up] Drag a token to reposition it within the editor: dragstart carries the token identity; on drop inside the editor place the caret at the drop point and move the token node there. Token already ships draggable=true, so additive.
+- [x] A1. [TOP PRIORITY] Image paste / upload into a session — let the user attach images directly instead of save-file-then-copy-path.
+  - [x] A1.1. In GUI mode, paste from clipboard (and ideally drag-and-drop a file) onto the compose box attaches an image.
+  - [x] A1.2. The cockpit saves the image into `<project-cwd>/uploaded-images/` (create the dir if missing) — clipboard images get persisted as a side win.
+  - [x] A1.3. The saved file's path is inserted into the prompt at the exact spot where the user pasted/dropped it (Claude receives the path reference).
+  - [x] A1.4. Filename: use the clipboard's name if present; else auto-generate `YYYY-MM-DD HH-MM-SS.<ext>` (ext from blob mime; default `.png`).
+  - [x] A1.5. Impl sketch: client `paste`/`drop` listeners on the compose textarea → read image blob → POST `upload-image {id, name?, dataBase64}` → server resolves the session cwd, writes `uploaded-images/<name>`, returns the absolute path → client inserts the path at the cursor. Handle multiple images.
+  - [x] A1.6. Flow: brainstorm (quick — it's concrete) → spec → plan → build → verify (paste a real screenshot, confirm file saved + path inserted + Claude can read it).
+  - [x] A1.7. [deferred follow-up] Drag a token to reposition it within the editor: dragstart carries the token identity; on drop inside the editor place the caret at the drop point and move the token node there. Token already ships draggable=true, so additive.
 - [ ] A2. [priority] Finish the priority interactive mechanisms in the GUI — native handling for the prompts below; rest of the interactivity roadmap is deferred. Spec: `docs/superpowers/specs/2026-06-25-gui-interactivity-design.md`. NOTE: there is no single standardized channel to detect ALL prompts (the Agent SDK's `canUseTool` standardizes tool-permissions + AskUserQuestion but only by driving Claude via the SDK instead of a PTY — a big future pivot, NOT planned).
   - [ ] A2.1. MCP-server-trust prompt ("New MCP server found") — fires NO hook → detect via terminal-parse of the prompt signature; show panel + answer keys (validate empirically).
   - [ ] A2.2. AskUserQuestion — detectable via `PreToolUse` (tool_input has questions+options); render selectable options → keystrokes (validate multi-question/multi-select driving).

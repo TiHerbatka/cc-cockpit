@@ -213,6 +213,7 @@ function mountGui(container, handlers) {
   // ---- Rich compose editor ---------------------------------------------------
   let tokenCounter = 0;
   let imgCtxMenu = null;
+  let draggedToken = null; // the .img-token currently being repositioned (A1.7)
 
   function closeImgCtxMenu() {
     if (imgCtxMenu) { imgCtxMenu.remove(); imgCtxMenu = null; }
@@ -291,6 +292,16 @@ function mountGui(container, handlers) {
     insertTokenAtCaret(result.path, result.name);
   }
 
+  // Map a viewport point to a collapsed Range (caret) — cross-browser.
+  function caretRangeFromPoint(x, y) {
+    if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y);
+    if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(x, y);
+      if (pos) { const r = document.createRange(); r.setStart(pos.offsetNode, pos.offset); r.collapse(true); return r; }
+    }
+    return null;
+  }
+
   const submit = () => {
     const descriptors = collectDescriptors(editor);
     const text = window.serializeDescriptors(descriptors);
@@ -316,27 +327,57 @@ function mountGui(container, handlers) {
     }
     document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
   });
-  editor.addEventListener('dragover', (e) => { e.preventDefault(); });
+  // Start repositioning an existing token within the editor (A1.7).
+  editor.addEventListener('dragstart', (e) => {
+    const token = e.target && e.target.closest && e.target.closest('.img-token');
+    if (!token || !editor.contains(token)) return;
+    draggedToken = token;
+    token.classList.add('dragging');
+    try {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', token.textContent); // some browsers require data to start a drag
+    } catch { /* setData may be restricted; the drag still proceeds */ }
+  });
+  editor.addEventListener('dragend', () => {
+    if (draggedToken) draggedToken.classList.remove('dragging');
+    draggedToken = null;
+  });
+  editor.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (draggedToken) { try { e.dataTransfer.dropEffect = 'move'; } catch { /* ignore */ } }
+  });
   editor.addEventListener('drop', (e) => {
     e.preventDefault();
+    const dropRange = caretRangeFromPoint(e.clientX, e.clientY);
+
+    // (A1.7) Repositioning a token already in the editor — move the node to the
+    // drop caret (no upload). Skip a drop onto the token itself (no-op).
+    if (draggedToken && editor.contains(draggedToken)) {
+      const token = draggedToken;
+      draggedToken = null;
+      token.classList.remove('dragging');
+      if (dropRange && dropRange.startContainer !== token && !token.contains(dropRange.startContainer)) {
+        dropRange.insertNode(token); // a node has one parent, so this moves it
+        const space = document.createTextNode(' ');
+        const after = document.createRange();
+        after.setStartAfter(token);
+        after.collapse(true);
+        after.insertNode(space);
+        after.setStartAfter(space);
+        after.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(after);
+      }
+      editor.focus();
+      return;
+    }
+
+    // External image-file drop — upload then insert a token at the drop caret.
     const files = [...(e.dataTransfer.files || [])];
     const imgFile = files.find((f) => f.type.startsWith('image/'));
     if (!imgFile) return;
-    // Place caret at the drop point before the async upload begins.
-    if (document.caretRangeFromPoint) {
-      const cr = document.caretRangeFromPoint(e.clientX, e.clientY);
-      if (cr) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(cr); }
-    } else if (document.caretPositionFromPoint) {
-      const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
-      if (pos) {
-        const r = document.createRange();
-        r.setStart(pos.offsetNode, pos.offset);
-        r.collapse(true);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(r);
-      }
-    }
+    if (dropRange) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(dropRange); }
     const sel = window.getSelection();
     const savedRange = (sel && sel.rangeCount) ? sel.getRangeAt(0).cloneRange() : null;
     uploadAndInsert(imgFile, savedRange);
