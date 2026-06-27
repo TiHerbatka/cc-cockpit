@@ -25,7 +25,7 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
   - [x] A1.5. Impl sketch: client `paste`/`drop` listeners on the compose textarea → read image blob → POST `upload-image {id, name?, dataBase64}` → server resolves the session cwd, writes `uploaded-images/<name>`, returns the absolute path → client inserts the path at the cursor. Handle multiple images.
   - [x] A1.6. Flow: brainstorm (quick — it's concrete) → spec → plan → build → verify (paste a real screenshot, confirm file saved + path inserted + Claude can read it).
   - [x] A1.7. [deferred follow-up] Drag a token to reposition it within the editor: dragstart carries the token identity; on drop inside the editor place the caret at the drop point and move the token node there. Token already ships draggable=true, so additive.
-- [ ] A2. [priority] Native GUI handling of interactive prompts, NOW delivered via the stream-json structured control channel from G1 (not terminal-parse + keystrokes). The control protocol standardizes tool-permissions + AskUserQuestion + plan-accept. Spec docs/superpowers/specs/2026-06-25-gui-interactivity-design.md (revisit under G1). Feature list below; non-tool TUI prompts (MCP-trust, trust-folder, elicitation) surfacing under stream-json is TBD by the G1.2 spike.
+- [ ] A2. [priority] Native GUI handling of interactive prompts, NOW delivered via the Agent SDK control channel from G1 (not terminal-parse + keystrokes). The SDK channel standardizes tool-permissions (canUseTool) + AskUserQuestion + plan-accept. Spec docs/superpowers/specs/2026-06-25-gui-interactivity-design.md (revisit under G1). Feature list below; non-tool TUI prompts (MCP-trust, trust-folder, elicitation) surfacing through the SDK is TBD by the G1.2 spike.
   - [ ] A2.1. MCP-server-trust prompt - NOT a tool call; whether stream-json surfaces it is uncertain (resolve in G1.2 spike). Feature preserved: show panel + answer.
   - [ ] A2.2. AskUserQuestion - covered by the control channel (questions+options exposed); render selectable options + return structured answer (delivered by G1.5).
   - [ ] A2.3. Plan-accept (ExitPlanMode) - covered by the control channel as a tool/permission. Approve / Approve+auto / Keep-planning (delivered by G1.5).
@@ -35,7 +35,7 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
   - [ ] A3.1. In the New-session and Resume modals, show a warning banner / warning icon with a tooltip when there are projects/sessions that were never used.
   - [ ] A3.2. Tooltip on click → list the projects containing those never-used sessions.
   - [ ] A3.3. Clarify when picking up: "never used" = projects with no recorded activity (New-session already has a "Never used" band); confirm the exact meaning for the Resume modal before building.
-- [ ] A4. [priority - LAST in this list] Slash-commands / skills + in-TUI pickers in the GUI - do after A2-A3; reshaped by G1 (some pickers become control ops: /model -> setModel, interrupt, permission-mode).
+- [ ] A4. [priority - LAST in this list] Slash-commands / skills + in-TUI pickers in the GUI - do after A2-A3; reshaped by G1 (some pickers become SDK control ops: /model -> setModel, interrupt via abortController, permission-mode via setPermissionMode).
   - [ ] A4.1. Slash-command + skill autocomplete in the compose box — typing `/` shows a filterable menu; selecting inserts it; plus an `@` file-mention picker. GUI-native autocomplete (the compose owns the input).
   - [ ] A4.2. In-TUI pickers surfaced/answerable from the GUI — `/model`, `/diff`, `/context`, interactive `/usage`, `/compact`, rewind (Esc-Esc), `/theme`, `/config`, `/effort` slider, extended-thinking/fast toggles. Detect + render (or surface + answer) rather than requiring a drop to Terminal mode.
 
@@ -52,7 +52,7 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 
 ## C. Verify (not build tasks)
 
-- [ ] C1. [VERIFY post-G1] Usage chip (ctx / 5h / 7d) stays fresh from stream-json (rate_limit_event + result.usage), NOT footer-scrape - the footer-scrape source is removed by G1.5.
+- [ ] C1. [VERIFY post-G1] Usage chip (ctx / 5h / 7d) stays fresh from the SDK message stream (rate_limit_event + result.usage), NOT footer-scrape - the footer-scrape source is removed by G1.5.
 
 ## D. Eventually
 
@@ -71,10 +71,10 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 
 - [x] F1. B2 no-transcript bug — root cause = inherited `CLAUDE_CODE_CHILD_SESSION=1`; fix = `scrubParentClaudeEnv` in `server/pty.js`. (Full writeup: `docs/superpowers/worklog/2026-06-25-b2-no-transcript-rootcause.md`.)
 
-## G. Re-architecture: PTY-driving -> programmatic stream-json [TOP PRIORITY]
-- [ ] G1. [TOP PRIORITY] Re-found cockpit interaction on the official claude CLI in stream-json mode (subscription auth verified 2026-06-27); PTY demoted to fallback. Foundational - reshapes A2 (interactive prompts -> structured control channel), A4 (pickers -> control ops), C1 (usage chip re-sourced from stream-json). Process: brainstorm -> design spec (docs/) -> plan -> phased build.
-  - [ ] G1.1. Archive the current PTY implementation to a separate branch before mutating code (so we can return / pull from it).
-  - [ ] G1.2. Control-protocol spike: confirm the stream-json message shapes for send-prompt, answer-permission, and interrupt; confirm subscription auth in full bidirectional --input-format stream-json mode (one-shot output already verified).
+## G. Re-architecture: PTY-driving -> Claude Agent SDK [TOP PRIORITY]
+- [ ] G1. [TOP PRIORITY] Re-found cockpit interaction on the Claude Agent SDK (query() driving the user's own subscription-auth claude; verified 2026-06-27); PTY demoted to fallback. Foundational - reshapes A2 (interactive prompts -> SDK control channel), A4 (pickers -> SDK control ops), C1 (usage chip re-sourced from the SDK message stream). Process: brainstorm -> design spec (docs/) -> plan -> phased build.
+  - [x] G1.1. Archive the current PTY implementation to a separate branch before mutating code (so we can return / pull from it).
+  - [x] G1.2. Control-protocol spike: confirm the Agent SDK query() shapes for send-prompt (streamInput), answer-permission (canUseTool / setPermissionMode), and interrupt (abortController); confirm subscription auth through the SDK (five_hour subscription rate-limit already verified).
   - [ ] G1.3. Brainstorm -> write the design spec (docs/superpowers/specs/) + implementation plan; decide what the GUI renders when PTY is no longer primary, and the terminal-fallback behavior.
-  - [ ] G1.4. Swap session spawn from node-pty to piped child_process stdio in stream-json mode; preserve scrubParentClaudeEnv + subscription-only auth (no API key); keep PTY spawn as the fallback path.
-  - [ ] G1.5. Structured output + input + control channel: live stream-json stdout (reuse server/normalize.js) replaces the transcript-tail poll; structured input replaces the text+CR typing + 3x bare-Enter nudge timer; structured control answers tool-permissions / AskUserQuestion / plan-accept (replaces 1/2/3 keystrokes) and powers A2; re-source mode + usage chips from stream-json (replaces readFooter screen-scrape + modeparse/usageparse); interrupt + permission-mode + model via control ops (replaces escape-code keystrokes); retire RingBuffer raw-byte replay + peek terminal replay behind the fallback.
+  - [ ] G1.4. Swap session spawn from node-pty to the Agent SDK query() (it spawns and owns the child claude over stdio); preserve subscription-only auth and enforce scrubParentClaudeEnv via the SDK env option (which REPLACES, not merges, the child env); keep PTY spawn as the fallback path.
+  - [ ] G1.5. Structured output + input + control channel via the SDK: the live SDK message stream (reuse server/normalize.js mapping) replaces the transcript-tail poll; structured input (streamInput) replaces the text+CR typing + 3x bare-Enter nudge timer; SDK control answers tool-permissions / AskUserQuestion / plan-accept (canUseTool, replaces 1/2/3 keystrokes) and powers A2; re-source mode + usage chips from the SDK stream (rate_limit_event + result.usage, replaces readFooter screen-scrape + modeparse/usageparse); interrupt (abortController) + permission-mode (setPermissionMode) + model via SDK control (replaces escape-code keystrokes); retire RingBuffer raw-byte replay + peek terminal replay behind the fallback.

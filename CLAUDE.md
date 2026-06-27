@@ -2,6 +2,12 @@
 
 Personal local web app: a multi-session **Claude Code cockpit**. One window shows all live Claude Code sessions at once; switch between them instantly; type into any of them. The unit is a *session*, not a *project*. Built because Agent View is too terse/slow to switch, kanban tools (Vibe Kanban, AI Agent Board) are task-centric (dispatch → review → merge), and claudecodeui is project-centric — none give a simultaneous-live-sessions cockpit.
 
+## Architecture direction (TOP PRIORITY): built on the Claude Agent SDK
+
+The project is being re-founded on the **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`). The cockpit drives each session through the SDK's `query()` — a structured programmatic channel for input, output, and tool-permission/control — instead of screen-driving a `claude` pseudo-terminal. `query()` spawns and owns a local `claude` subprocess and talks to it over stdio; that bundled `claude` authenticates on the **user's own Claude Code subscription** (verified 2026-06-27 via the `five_hour` subscription rate-limit), so the subscription-only posture is preserved. **cc-cockpit relies solely on the user's Claude Code subscription.** The PTY/`node-pty` path is demoted to a **fallback** only. The re-architecture is tracked as TODO section G; rationale and the SDK process model are in `local-docs.md` (§2, §5).
+
+- **The SDK does not replace stream-json — it wraps it.** The SDK speaks the same newline-delimited JSON protocol to its child `claude` over stdio; choosing the SDK means letting it speak that protocol for us rather than hand-rolling the raw CLI. "SDK" and "stream-json" are therefore the same substrate at different layers, not competing options.
+- **Env scrub stays mandatory, now enforced through the SDK's `env` option.** The SDK's `env` *replaces* the child environment rather than merging with `process.env`, so the cockpit must hand it the complete, already-scrubbed env (`scrubParentClaudeEnv({ ...process.env })`). Omitting `env` would let the parent Claude Code session's leaked markers (`CLAUDECODE`, `CLAUDE_CODE_*`, …) reach the child and reproduce the no-transcript bug; passing a minimal `env` would instead strip vars the child needs (`PATH`, `USERPROFILE`, …) and break the spawn. Same scrub logic as the PTY path — only the delivery point moves.
 ## Status (as of 2026-06-24)
 
 - ✅ **MVP built and merged to `master`** — design spec (`docs/superpowers/specs/2026-06-16-cc-cockpit-design.md`) + plan (`docs/superpowers/plans/2026-06-16-cc-cockpit-mvp.md`); all 7 spec acceptance criteria verified live in a browser. Run it with `npm start`.
@@ -27,6 +33,8 @@ The MVP is complete. To run it: `npm install` (first time only) then `npm start`
 - Start the app: `npm start` → open `http://127.0.0.1:4477`
 
 ## Architecture (summary — full detail in the spec)
+
+> Note: this describes the **current (PTY) implementation**. Per the architecture direction above, the Claude Agent SDK path supersedes it and PTY becomes the fallback (TODO section G).
 
 A Node server owns each `claude` session as a pseudo-terminal (`node-pty`/ConPTY) and bridges them to a single `xterm.js` page over a WebSocket. Core logic (`RingBuffer`, `SessionRegistry`) is dependency-injected and event-emitting so it is unit-testable without spawning real processes; the PTY adapter and server wiring get integration tests (benign command / fake PTY); the browser UI was verified live in a browser against the spec's acceptance criteria. Files: `server/{buffer,sessions,pty,app,index}.js`, `public/{index.html,app.js,styles.css}`, `scripts/copy-assets.js`, `test/*.test.js`.
 
