@@ -152,7 +152,15 @@ function createSdkDriver(cwd, id, opts = {}, deps = {}) {
       else if (answer === 'allow-always' && p.suggestions.length) p.resolve({ behavior: 'allow', updatedInput: p.input, updatedPermissions: p.suggestions });
       else p.resolve({ behavior: 'allow', updatedInput: p.input });
     } else if (p.kind === 'question') {
-      const answers = (answer && answer.answers) || answer;
+      // AskUserQuestion's input schema requires `answers` as a RECORD keyed by the
+      // question text -> chosen label (multi-select labels comma-joined), NOT an
+      // array — else the SDK rejects updatedInput with a schema-validation error.
+      const list = (answer && answer.answers) || [];
+      const answers = {};
+      for (const a of list) {
+        if (!a || a.question == null) continue;
+        answers[a.question] = Array.isArray(a.answer) ? a.answer.filter(Boolean).join(', ') : (a.answer == null ? '' : String(a.answer));
+      }
       p.resolve({ behavior: 'allow', updatedInput: { ...p.input, answers } });
     } else if (p.kind === 'plan') {
       if (answer === 'keep-planning') p.resolve({ behavior: 'deny', message: 'Keep planning.' });

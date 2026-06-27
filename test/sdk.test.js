@@ -81,7 +81,7 @@ test('answerInteraction maps permission deny and allow-always', async () => {
   assert.deepStrictEqual(await pAlways, { behavior: 'allow', updatedInput: { command: 'y' }, updatedPermissions: [{ type: 'addRules', x: 1 }] });
 });
 
-test('AskUserQuestion parks as kind question and resolves with answers in updatedInput', async () => {
+test('AskUserQuestion resolves with answers as a record keyed by question text', async () => {
   let canUse;
   const d = createSdkDriver('C:/x', 'id', {}, { query: (a) => { canUse = a.options.canUseTool; return (async function* () {})(); } });
   const reqs = [];
@@ -91,7 +91,16 @@ test('AskUserQuestion parks as kind question and resolves with answers in update
   assert.strictEqual(reqs[0].kind, 'question');
   assert.deepStrictEqual(reqs[0].questions, questions);
   d.answerInteraction('q1', { answers: [{ question: 'Pick?', answer: 'A' }] });
-  assert.deepStrictEqual(await p, { behavior: 'allow', updatedInput: { questions, answers: [{ question: 'Pick?', answer: 'A' }] } });
+  assert.deepStrictEqual(await p, { behavior: 'allow', updatedInput: { questions, answers: { 'Pick?': 'A' } } });
+});
+
+test('AskUserQuestion multi-select answers are comma-joined in the record', async () => {
+  let canUse;
+  const d = createSdkDriver('C:/x', 'id', {}, { query: (a) => { canUse = a.options.canUseTool; return (async function* () {})(); } });
+  d.onInteraction(() => {});
+  const p = canUse('AskUserQuestion', { questions: [] }, { toolUseID: 'q2' });
+  d.answerInteraction('q2', { answers: [{ question: 'Which?', answer: ['X', 'Y'] }] });
+  assert.deepStrictEqual((await p).updatedInput.answers, { 'Which?': 'X, Y' });
 });
 
 test('ExitPlanMode parks as kind plan; approve/keep-planning/approve-auto resolve correctly', async () => {
