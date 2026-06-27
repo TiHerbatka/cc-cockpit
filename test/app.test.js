@@ -12,13 +12,13 @@ const { createApp } = require('../server/app');
 function fakeDriverFactory() {
   const drivers = [];
   const factory = () => {
-    const o = { written: [], killed: false, interrupted: false, answered: [], modeSet: [], modelSet: [], _msg: null, _exit: null, _error: null, _perm: null };
+    const o = { written: [], killed: false, interrupted: false, answered: [], modeSet: [], modelSet: [], _msg: null, _exit: null, _error: null, _interaction: null };
     o.onMessage = (cb) => { o._msg = cb; };
     o.onExit = (cb) => { o._exit = cb; };
     o.onError = (cb) => { o._error = cb; };
-    o.onPermission = (cb) => { o._perm = cb; };
+    o.onInteraction = (cb) => { o._interaction = cb; };
     o.write = (t) => o.written.push(t);
-    o.answerPermission = (tid, dec) => o.answered.push([tid, dec]);
+    o.answerInteraction = (rid, ans) => o.answered.push([rid, ans]);
     o.interrupt = () => { o.interrupted = true; };
     o.setPermissionMode = (m) => o.modeSet.push(m);
     o.setModel = (m) => o.modelSet.push(m);
@@ -247,7 +247,7 @@ test('a driver error is surfaced to the client as an error message', async () =>
   await new Promise((r) => server.close(r));
 });
 
-test('a permission request is broadcast and the answer reaches the driver', async () => {
+test('an interaction request is broadcast and the answer reaches the driver', async () => {
   const { factory, drivers } = fakeDriverFactory();
   const { server } = createApp({ spawnDriver: factory });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -259,13 +259,13 @@ test('a permission request is broadcast and the answer reaches the driver', asyn
   ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
   const id = (await created).sessions[0].id;
 
-  const permReq = nextMessage(ws, (m) => m.type === 'permission-request' && m.id === id);
-  drivers[0]._perm({ toolName: 'Write', input: { file_path: 'x' }, toolUseId: 't1', suggestions: [] });
-  const r = await permReq;
-  assert.strictEqual(r.toolName, 'Write');
-  assert.strictEqual(r.toolUseId, 't1');
+  const intReq = nextMessage(ws, (m) => m.type === 'interaction-request' && m.id === id);
+  drivers[0]._interaction({ requestId: 't1', kind: 'permission', toolName: 'Write', input: { file_path: 'x' }, suggestions: [] });
+  const r = await intReq;
+  assert.strictEqual(r.kind, 'permission');
+  assert.strictEqual(r.requestId, 't1');
 
-  ws.send(JSON.stringify({ type: 'permission-answer', id, toolUseId: 't1', decision: 'deny' }));
+  ws.send(JSON.stringify({ type: 'interaction-answer', id, requestId: 't1', answer: 'deny' }));
   const snap = nextMessage(ws, (m) => m.type === 'gui-snapshot' && m.id === id); // attach ordering
   ws.send(JSON.stringify({ type: 'attach', id }));
   await snap;

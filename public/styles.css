@@ -31,6 +31,25 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .mode-chip { cursor: pointer; flex: 0 0 auto; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #2d2d30; border: 1px solid #3c3c3c; color: #c5c5c5; white-space: nowrap; }
 .mode-chip:hover { background: #34343a; border-color: #4a4a50; }
 .model-select { flex: 0 0 auto; font-size: 11px; padding: 2px 4px; border-radius: 6px; background: #2d2d30; border: 1px solid #3c3c3c; color: #c5c5c5; cursor: pointer; }
+/* Blocking interaction modal — overlays the chat pane (#gui-pane) only. */
+.interaction-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.interaction-card { background: #252526; border: 1px solid #4a4a50; border-radius: 8px; width: min(560px, 86%); max-height: 84%; overflow-y: auto; padding: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+.interaction-head { color: #9cdcfe; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.interaction-sub { color: #ddd; font-size: 13px; margin-bottom: 8px; }
+.interaction-input { background: #1e1e1e; border: 1px solid #3c3c3c; border-radius: 4px; padding: 8px; font-size: 12px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.interaction-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.interaction-actions button { padding: 6px 12px; border-radius: 4px; border: 1px solid #3c3c3c; cursor: pointer; font-size: 12px; }
+.btn-allow { background: #2d4a2d; color: #cfe9cf; border-color: #3a5a3a; }
+.btn-allow2 { background: #2d3a4a; color: #cfe0e9; border-color: #3a4a5a; }
+.btn-deny { background: #5a2d2d; color: #e9cfcf; border-color: #7a3a3a; }
+.interaction-q { margin: 10px 0; }
+.interaction-qhead { color: #ddd; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.interaction-opt { display: block; width: 100%; text-align: left; background: #2d2d30; color: #ddd; border: 1px solid #3c3c3c; border-radius: 4px; padding: 6px 10px; margin: 4px 0; cursor: pointer; font-size: 12px; }
+.interaction-opt:hover { background: #34343a; }
+.interaction-opt.sel { background: #094771; border-color: #1177bb; }
+.interaction-field { display: block; color: #ddd; font-size: 12px; margin: 6px 0; }
+.interaction-field input { display: block; width: 100%; margin-top: 2px; background: #1e1e1e; color: #ddd; border: 1px solid #3c3c3c; border-radius: 4px; padding: 4px; }
+.interaction-url { color: #9cdcfe; word-break: break-all; }
 #interrupt-btn { flex: 0 0 auto; background: #5a2d2d; color: #fff; border: none; border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
 #interrupt-btn:hover { background: #7a3a3a; }
 #interrupt-btn[hidden] { display: none; }

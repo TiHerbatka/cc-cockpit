@@ -91,27 +91,35 @@ function createSdkDriver(cwd, id, opts = {}, deps = {}) {
   const messageCbs = [];
   const exitCbs = [];
   const errorCbs = [];
-  const permissionCbs = [];
-  const pending = new Map(); // toolUseId -> { resolve, input, suggestions }
-  let permSeq = 0;
+  const interactionCbs = [];
+  const pending = new Map(); // requestId -> { resolve, kind, input, suggestions }
+  let seq = 0;
   const ac = new AbortController();
   const input = makeInputQueue();
 
-  // Surface a gated tool to the GUI and await the user's answer (resolved later via
-  // answerPermission). AskUserQuestion / ExitPlanMode aren't allow/deny gates —
-  // decline them (their rich answer-UI is a separate, deferred feature). Tools the
-  // user's loaded settings already allow never reach this callback.
-  const canUseTool = (toolName, toolInput, options = {}) => {
-    if (toolName === 'AskUserQuestion' || toolName === 'ExitPlanMode') {
-      return Promise.resolve({ behavior: 'deny', message: 'Interactive prompts are not available in this session yet — proceed with your best judgment.' });
-    }
-    return new Promise((resolve) => {
-      const toolUseId = options.toolUseID || `perm-${++permSeq}`;
-      const suggestions = options.suggestions || [];
-      pending.set(toolUseId, { resolve, input: toolInput, suggestions });
-      for (const cb of permissionCbs) cb({ toolName, input: toolInput, toolUseId, suggestions });
-    });
-  };
+  const surface = (req) => { for (const cb of interactionCbs) cb(req); };
+
+  // Every "Claude is waiting on the user" moment becomes a tagged interaction the
+  // GUI must answer (resolved later via answerInteraction). Gated tools arrive via
+  // canUseTool: AskUserQuestion -> 'question', ExitPlanMode -> 'plan', anything else
+  // -> 'permission'. Tools the user's loaded settings already allow never reach it.
+  const canUseTool = (toolName, toolInput, options = {}) => new Promise((resolve) => {
+    const requestId = options.toolUseID || `int-${++seq}`;
+    const suggestions = options.suggestions || [];
+    let kind = 'permission';
+    let payload = { toolName, input: toolInput, suggestions };
+    if (toolName === 'AskUserQuestion') { kind = 'question'; payload = { questions: (toolInput && toolInput.questions) || [] }; }
+    else if (toolName === 'ExitPlanMode') { kind = 'plan'; payload = { plan: toolInput && toolInput.plan }; }
+    pending.set(requestId, { resolve, kind, input: toolInput, suggestions });
+    surface({ requestId, kind, ...payload });
+  });
+
+  // MCP elicitation: a server asks the user for input (form/url). Parked the same way.
+  const onElicitation = (request) => new Promise((resolve) => {
+    const requestId = (request && request.elicitationId) || `eli-${++seq}`;
+    pending.set(requestId, { resolve, kind: 'elicitation' });
+    surface({ requestId, kind: 'elicitation', request });
+  });
 
   const q = query({
     prompt: input,
@@ -120,38 +128,50 @@ function createSdkDriver(cwd, id, opts = {}, deps = {}) {
       env: scrubChildEnv({ ...process.env }),
       permissionMode: 'default',
       settingSources: ['user', 'project', 'local'],
+      allowDangerouslySkipPermissions: true, // lets the bypassPermissions mode actually apply when chosen
       canUseTool,
+      onElicitation,
       abortController: ac,
       resume: opts.resumeId || undefined,
     },
   });
 
   (async () => {
-    try {
-      for await (const msg of q) { for (const cb of messageCbs) cb(msg); }
-    } catch (e) {
-      for (const cb of errorCbs) cb(e);
-    } finally {
-      for (const cb of exitCbs) cb();
-    }
+    try { for await (const msg of q) { for (const cb of messageCbs) cb(msg); } }
+    catch (e) { for (const cb of errorCbs) cb(e); }
+    finally { for (const cb of exitCbs) cb(); }
   })();
+
+  // Resolve a parked interaction with the user's answer, interpreted per kind.
+  const answerInteraction = (requestId, answer) => {
+    const p = pending.get(requestId);
+    if (!p) return;
+    pending.delete(requestId);
+    if (p.kind === 'permission') {
+      if (answer === 'deny') p.resolve({ behavior: 'deny', message: 'Denied by the user.' });
+      else if (answer === 'allow-always' && p.suggestions.length) p.resolve({ behavior: 'allow', updatedInput: p.input, updatedPermissions: p.suggestions });
+      else p.resolve({ behavior: 'allow', updatedInput: p.input });
+    } else if (p.kind === 'question') {
+      const answers = (answer && answer.answers) || answer;
+      p.resolve({ behavior: 'allow', updatedInput: { ...p.input, answers } });
+    } else if (p.kind === 'plan') {
+      if (answer === 'keep-planning') p.resolve({ behavior: 'deny', message: 'Keep planning.' });
+      else {
+        if (answer === 'approve-auto') { try { if (q && typeof q.setPermissionMode === 'function') q.setPermissionMode('acceptEdits'); } catch { /* ignore */ } }
+        p.resolve({ behavior: 'allow', updatedInput: p.input });
+      }
+    } else if (p.kind === 'elicitation') {
+      p.resolve(answer && answer.action ? answer : { action: 'cancel' });
+    }
+  };
 
   return {
     onMessage: (cb) => messageCbs.push(cb),
     onExit: (cb) => exitCbs.push(cb),
     onError: (cb) => errorCbs.push(cb),
-    onPermission: (cb) => permissionCbs.push(cb),
+    onInteraction: (cb) => interactionCbs.push(cb),
     write: (text) => input.push({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null }),
-    // Resolve a parked permission with the user's decision (allow / allow-always /
-    // deny). allow-always persists the SDK's suggested rule(s) if any were offered.
-    answerPermission: (toolUseId, decision) => {
-      const p = pending.get(toolUseId);
-      if (!p) return;
-      pending.delete(toolUseId);
-      if (decision === 'deny') p.resolve({ behavior: 'deny', message: 'Denied by the user.' });
-      else if (decision === 'allow-always' && p.suggestions.length) p.resolve({ behavior: 'allow', updatedInput: p.input, updatedPermissions: p.suggestions });
-      else p.resolve({ behavior: 'allow', updatedInput: p.input });
-    },
+    answerInteraction,
     interrupt: () => { try { if (q && typeof q.interrupt === 'function') return q.interrupt(); } catch { /* ignore */ } },
     setPermissionMode: (mode) => { try { if (q && typeof q.setPermissionMode === 'function') return q.setPermissionMode(mode); } catch { /* ignore */ } },
     setModel: (model) => { try { if (q && typeof q.setModel === 'function') return q.setModel(model); } catch { /* ignore */ } },

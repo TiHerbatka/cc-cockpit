@@ -58,34 +58,73 @@ test('write delivers a wrapped streaming user message to the query input', async
   d.kill();
 });
 
-test('canUseTool parks a gated tool, surfaces it via onPermission, resolves on allow', async () => {
+test('canUseTool parks a gated tool as a permission interaction; allow resolves it', async () => {
   let canUse;
   const d = createSdkDriver('C:/x', 'id', {}, { query: (a) => { canUse = a.options.canUseTool; return (async function* () {})(); } });
   const reqs = [];
-  d.onPermission((r) => reqs.push(r));
-  const p = canUse('Write', { file_path: 'a' }, { toolUseID: 't1', suggestions: [{ type: 'addRule' }] });
-  assert.deepStrictEqual(reqs, [{ toolName: 'Write', input: { file_path: 'a' }, toolUseId: 't1', suggestions: [{ type: 'addRule' }] }]);
-  d.answerPermission('t1', 'allow');
+  d.onInteraction((r) => reqs.push(r));
+  const p = canUse('Write', { file_path: 'a' }, { toolUseID: 't1', suggestions: [{ type: 'addRules' }] });
+  assert.deepStrictEqual(reqs, [{ requestId: 't1', kind: 'permission', toolName: 'Write', input: { file_path: 'a' }, suggestions: [{ type: 'addRules' }] }]);
+  d.answerInteraction('t1', 'allow');
   assert.deepStrictEqual(await p, { behavior: 'allow', updatedInput: { file_path: 'a' } });
 });
 
-test('answerPermission maps deny and allow-always to the right PermissionResult', async () => {
+test('answerInteraction maps permission deny and allow-always', async () => {
   let canUse;
   const d = createSdkDriver('C:/x', 'id', {}, { query: (a) => { canUse = a.options.canUseTool; return (async function* () {})(); } });
-  d.onPermission(() => {});
+  d.onInteraction(() => {});
   const pDeny = canUse('Bash', { command: 'x' }, { toolUseID: 'd1' });
-  d.answerPermission('d1', 'deny');
+  d.answerInteraction('d1', 'deny');
   assert.deepStrictEqual(await pDeny, { behavior: 'deny', message: 'Denied by the user.' });
-  const pAlways = canUse('Bash', { command: 'y' }, { toolUseID: 'a1', suggestions: [{ type: 'addRule', x: 1 }] });
-  d.answerPermission('a1', 'allow-always');
-  assert.deepStrictEqual(await pAlways, { behavior: 'allow', updatedInput: { command: 'y' }, updatedPermissions: [{ type: 'addRule', x: 1 }] });
+  const pAlways = canUse('Bash', { command: 'y' }, { toolUseID: 'a1', suggestions: [{ type: 'addRules', x: 1 }] });
+  d.answerInteraction('a1', 'allow-always');
+  assert.deepStrictEqual(await pAlways, { behavior: 'allow', updatedInput: { command: 'y' }, updatedPermissions: [{ type: 'addRules', x: 1 }] });
 });
 
-test('canUseTool declines AskUserQuestion / ExitPlanMode without parking', async () => {
+test('AskUserQuestion parks as kind question and resolves with answers in updatedInput', async () => {
   let canUse;
-  createSdkDriver('C:/x', 'id', {}, { query: (a) => { canUse = a.options.canUseTool; return (async function* () {})(); } });
-  assert.strictEqual((await canUse('AskUserQuestion', { questions: [] }, {})).behavior, 'deny');
-  assert.strictEqual((await canUse('ExitPlanMode', {}, {})).behavior, 'deny');
+  const d = createSdkDriver('C:/x', 'id', {}, { query: (a) => { canUse = a.options.canUseTool; return (async function* () {})(); } });
+  const reqs = [];
+  d.onInteraction((r) => reqs.push(r));
+  const questions = [{ question: 'Pick?', header: 'X', options: [{ label: 'A' }, { label: 'B' }], multiSelect: false }];
+  const p = canUse('AskUserQuestion', { questions }, { toolUseID: 'q1' });
+  assert.strictEqual(reqs[0].kind, 'question');
+  assert.deepStrictEqual(reqs[0].questions, questions);
+  d.answerInteraction('q1', { answers: [{ question: 'Pick?', answer: 'A' }] });
+  assert.deepStrictEqual(await p, { behavior: 'allow', updatedInput: { questions, answers: [{ question: 'Pick?', answer: 'A' }] } });
+});
+
+test('ExitPlanMode parks as kind plan; approve/keep-planning/approve-auto resolve correctly', async () => {
+  let canUse;
+  const modes = [];
+  const fakeQ = Object.assign((async function* () {})(), { setPermissionMode: (m) => modes.push(m) });
+  const d = createSdkDriver('C:/x', 'id', {}, { query: (a) => { canUse = a.options.canUseTool; return fakeQ; } });
+  const reqs = [];
+  d.onInteraction((r) => reqs.push(r));
+  const pApprove = canUse('ExitPlanMode', { plan: 'do X' }, { toolUseID: 'pl1' });
+  assert.strictEqual(reqs[0].kind, 'plan');
+  assert.strictEqual(reqs[0].plan, 'do X');
+  d.answerInteraction('pl1', 'approve');
+  assert.strictEqual((await pApprove).behavior, 'allow');
+  const pKeep = canUse('ExitPlanMode', { plan: 'y' }, { toolUseID: 'pl2' });
+  d.answerInteraction('pl2', 'keep-planning');
+  assert.strictEqual((await pKeep).behavior, 'deny');
+  const pAuto = canUse('ExitPlanMode', { plan: 'z' }, { toolUseID: 'pl3' });
+  d.answerInteraction('pl3', 'approve-auto');
+  assert.strictEqual((await pAuto).behavior, 'allow');
+  assert.deepStrictEqual(modes, ['acceptEdits']);
+});
+
+test('onElicitation parks as kind elicitation and resolves with the ElicitResult', async () => {
+  let onElic;
+  const d = createSdkDriver('C:/x', 'id', {}, { query: (a) => { onElic = a.options.onElicitation; return (async function* () {})(); } });
+  const reqs = [];
+  d.onInteraction((r) => reqs.push(r));
+  const p = onElic({ serverName: 'srv', message: 'Need input', mode: 'form', elicitationId: 'e1' });
+  assert.strictEqual(reqs[0].kind, 'elicitation');
+  assert.strictEqual(reqs[0].request.message, 'Need input');
+  d.answerInteraction('e1', { action: 'accept', content: { name: 'Bob' } });
+  assert.deepStrictEqual(await p, { action: 'accept', content: { name: 'Bob' } });
 });
 
 test('setPermissionMode / setModel / interrupt call through to the query object', () => {
@@ -112,5 +151,6 @@ test('createSdkDriver builds subscription-only options (scrubbed env, settingSou
   assert.deepStrictEqual(opts.settingSources, ['user', 'project', 'local']);
   assert.strictEqual(opts.resume, 'r1');
   assert.strictEqual(opts.permissionMode, 'default');
+  assert.strictEqual(opts.allowDangerouslySkipPermissions, true);
   assert.ok(opts.abortController instanceof AbortController);
 });

@@ -34,7 +34,7 @@ class SessionRegistry extends EventEmitter {
       topics: [],          // assistant's per-session topic tracker (from ~/.claude/topics)
       status: 'working',
       conversation: createConversation(), // the live render model + delta fold
-      pendingPermission: null, // a tool-permission request awaiting the user's answer
+      pendingInteraction: null, // a blocking interaction (permission/question/plan/elicitation) awaiting the user
       autoTitle: null,     // Claude Code aiTitle (filled in for temp sessions)
       customName: null,    // user-set display name (rename) — wins over the rest
       driver,
@@ -53,7 +53,7 @@ class SessionRegistry extends EventEmitter {
     driver.onMessage((msg) => this._onMessage(id, msg));
     driver.onExit(() => this.markExited(id));
     if (driver.onError) driver.onError((e) => this._onError(id, e));
-    if (driver.onPermission) driver.onPermission((req) => this._onPermission(id, req));
+    if (driver.onInteraction) driver.onInteraction((req) => this._onInteraction(id, req));
     this.emit('sessions');
     return this._public(session);
   }
@@ -87,14 +87,14 @@ class SessionRegistry extends EventEmitter {
     this.emit('session-error', id, err && err.message ? err.message : String(err));
   }
 
-  // A gated tool is awaiting a decision: record it, flag the session needs-you,
-  // and surface the request to the GUI.
-  _onPermission(id, req) {
+  // Claude is blocked on a user decision (permission / question / plan /
+  // elicitation): record it, flag the session needs-you, surface it to the GUI.
+  _onInteraction(id, req) {
     const s = this.sessions.get(id);
     if (!s || s.exited) return;
-    s.pendingPermission = req;
+    s.pendingInteraction = req;
     this.signalWaiting(id);
-    this.emit('permission', id, req);
+    this.emit('interaction', id, req);
   }
 
   // Send a user turn into the live session (structured input replaces keystrokes).
@@ -109,19 +109,19 @@ class SessionRegistry extends EventEmitter {
     this.markWorking(id);
   }
 
-  // Resolve a pending tool-permission with the user's decision; the turn resumes.
-  answerPermission(id, toolUseId, decision) {
+  // Resolve a pending interaction with the user's answer; the turn resumes.
+  answerInteraction(id, requestId, answer) {
     const s = this.sessions.get(id);
     if (!s || s.exited) return;
-    if (s.driver.answerPermission) s.driver.answerPermission(toolUseId, decision);
-    s.pendingPermission = null;
+    if (s.driver.answerInteraction) s.driver.answerInteraction(requestId, answer);
+    s.pendingInteraction = null;
     this.markWorking(id);
   }
 
-  // The tool-permission request awaiting an answer (re-sent to a client on attach).
-  pendingPermissionOf(id) {
+  // The interaction awaiting an answer (re-sent to a client on attach).
+  pendingInteractionOf(id) {
     const s = this.sessions.get(id);
-    return s ? s.pendingPermission : null;
+    return s ? s.pendingInteraction : null;
   }
 
   // Stop the current turn.

@@ -150,7 +150,7 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
   registry.on('meta', (id, meta) => broadcast({ type: 'meta', id, ...meta }));
   registry.on('sessions', () => broadcast({ type: 'sessions', sessions: registry.list() }));
   registry.on('session-error', (id, message) => broadcast({ type: 'error', message }));
-  registry.on('permission', (id, req) => broadcast({ type: 'permission-request', id, ...req }));
+  registry.on('interaction', (id, req) => broadcast({ type: 'interaction-request', id, ...req }));
 
   // Send the focused session's current model as a full snapshot (attach/re-point).
   const sendSnapshot = (ws, id) => {
@@ -176,8 +176,8 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
         catch (e) { ws.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); }
       } else if (m.type === 'send') {
         registry.send(m.id, m.text);
-      } else if (m.type === 'permission-answer') {
-        registry.answerPermission(m.id, m.toolUseId, m.decision);
+      } else if (m.type === 'interaction-answer') {
+        registry.answerInteraction(m.id, m.requestId, m.answer);
       } else if (m.type === 'interrupt') {
         registry.interrupt(m.id);
       } else if (m.type === 'set-permission-mode') {
@@ -187,9 +187,9 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
       } else if (m.type === 'attach') {
         registry.acknowledge(m.id);
         sendSnapshot(ws, m.id);
-        // Re-send a still-pending permission so focusing a waiting session shows it.
-        const pend = registry.pendingPermissionOf(m.id);
-        if (pend && ws.readyState === 1) ws.send(JSON.stringify({ type: 'permission-request', id: m.id, ...pend }));
+        // Re-send a still-pending interaction so focusing a waiting session shows it.
+        const pend = registry.pendingInteractionOf(m.id);
+        if (pend && ws.readyState === 1) ws.send(JSON.stringify({ type: 'interaction-request', id: m.id, ...pend }));
       } else if (m.type === 'gui-attach') {
         sendSnapshot(ws, m.id);
       } else if (m.type === 'gui-detach') {

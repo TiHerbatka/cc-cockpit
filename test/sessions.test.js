@@ -6,13 +6,13 @@ const { SessionRegistry } = require('../server/sessions');
 // registers onMessage/onExit/onError synchronously in create(), so a test drives
 // the stream via driver._msg(...) / driver._exit() / driver._error(...).
 function makeFakeDriver() {
-  const o = { written: [], killed: false, interrupted: false, answered: [], modeSet: [], modelSet: [], _msg: null, _exit: null, _error: null, _perm: null };
+  const o = { written: [], killed: false, interrupted: false, answered: [], modeSet: [], modelSet: [], _msg: null, _exit: null, _error: null, _interaction: null };
   o.onMessage = (cb) => { o._msg = cb; };
   o.onExit = (cb) => { o._exit = cb; };
   o.onError = (cb) => { o._error = cb; };
-  o.onPermission = (cb) => { o._perm = cb; };
+  o.onInteraction = (cb) => { o._interaction = cb; };
   o.write = (t) => o.written.push(t);
-  o.answerPermission = (tid, dec) => o.answered.push([tid, dec]);
+  o.answerInteraction = (rid, ans) => o.answered.push([rid, ans]);
   o.interrupt = () => { o.interrupted = true; };
   o.setPermissionMode = (m) => o.modeSet.push(m);
   o.setModel = (m) => o.modelSet.push(m);
@@ -118,25 +118,25 @@ test('an init message emits meta with the permission mode and model', () => {
   assert.deepStrictEqual(metas, [[s.id, { mode: 'default', model: 'm' }]]);
 });
 
-test('a permission request flags needs-you, records pending, and emits permission', () => {
+test('an interaction request flags needs-you, records pending, and emits interaction', () => {
   const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/proj/a'); // unfocused
-  const perms = [];
-  reg.on('permission', (id, req) => perms.push([id, req]));
-  const req = { toolName: 'Write', input: { file_path: 'x' }, toolUseId: 't1', suggestions: [] };
-  drivers[0]._perm(req);
+  const ints = [];
+  reg.on('interaction', (id, req) => ints.push([id, req]));
+  const req = { requestId: 't1', kind: 'permission', toolName: 'Write', input: { file_path: 'x' }, suggestions: [] };
+  drivers[0]._interaction(req);
   assert.strictEqual(reg.get(s.id).status, 'needs-you');
-  assert.deepStrictEqual(reg.pendingPermissionOf(s.id), req);
-  assert.deepStrictEqual(perms, [[s.id, req]]);
+  assert.deepStrictEqual(reg.pendingInteractionOf(s.id), req);
+  assert.deepStrictEqual(ints, [[s.id, req]]);
 });
 
-test('answerPermission resolves via the driver, clears pending, and resumes working', () => {
+test('answerInteraction resolves via the driver, clears pending, and resumes working', () => {
   const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/proj/a');
-  drivers[0]._perm({ toolName: 'Write', input: {}, toolUseId: 't1', suggestions: [] });
-  reg.answerPermission(s.id, 't1', 'allow');
+  drivers[0]._interaction({ requestId: 't1', kind: 'permission' });
+  reg.answerInteraction(s.id, 't1', 'allow');
   assert.deepStrictEqual(drivers[0].answered, [['t1', 'allow']]);
-  assert.strictEqual(reg.pendingPermissionOf(s.id), null);
+  assert.strictEqual(reg.pendingInteractionOf(s.id), null);
   assert.strictEqual(reg.get(s.id).status, 'working');
 });
 

@@ -13,6 +13,11 @@ let previewModel = null;
 let previewBody = null;
 let previewOverlay = null;
 
+// The active blocking interaction (permission / question / plan / elicitation) for
+// the focused session, rendered as a modal over the chat pane.
+let currentInteraction = null;
+let interactionOverlay = null;
+
 const listEl = document.getElementById('session-list');
 const errorEl = document.getElementById('error');
 
@@ -236,7 +241,7 @@ function focus(id) {
   focusedId = id;
   errorEl.textContent = '';
   guiModel = null; // reset until the new session's snapshot arrives
-  gui.hidePermission(); // clear any stale panel from the previous session
+  closeInteractionModal(); // clear any stale interaction modal from the previous session
   // attach acknowledges the session (clearing a your-move signal) and triggers a
   // gui-snapshot of its current model.
   ws.send(JSON.stringify({ type: 'attach', id }));
@@ -262,8 +267,8 @@ ws.addEventListener('message', (ev) => {
     window.renderGuiModel(previewBody, previewModel);
   } else if (m.type === 'meta' && m.id === focusedId) {
     renderMeta(m);
-  } else if (m.type === 'permission-request' && m.id === focusedId) {
-    gui.showPermission(m, (decision) => ws.send(JSON.stringify({ type: 'permission-answer', id: m.id, toolUseId: m.toolUseId, decision })));
+  } else if (m.type === 'interaction-request' && m.id === focusedId) {
+    openInteractionModal(m);
   } else if (m.type === 'error') {
     errorEl.textContent = m.message;
     errorCenter.add('Server: ' + m.message);
@@ -676,6 +681,123 @@ function openPreview(s) {
   overlay.onclick = (e) => { if (e.target === overlay) closePreview(); };
   closeBtn.onclick = closePreview;
   ws.send(JSON.stringify({ type: 'peek', id: s.id }));
+}
+
+// ---- Blocking interaction modal (per session, over the chat pane) -----------
+// One modal for every "Claude is waiting on you" moment: tool-permission,
+// AskUserQuestion, plan-accept, MCP elicitation. It overlays the chat pane only
+// (the sidebar stays usable), is tied to the focused session, and the pending
+// interaction is re-sent by the server on attach so switching back re-shows it.
+function closeInteractionModal() {
+  if (interactionOverlay && interactionOverlay.parentNode) interactionOverlay.remove();
+  interactionOverlay = null; currentInteraction = null;
+}
+
+function answerInteraction(answer) {
+  if (!currentInteraction) return;
+  ws.send(JSON.stringify({ type: 'interaction-answer', id: currentInteraction.id, requestId: currentInteraction.requestId, answer }));
+  closeInteractionModal();
+}
+
+function interactionActions(buttons) {
+  const row = document.createElement('div');
+  row.className = 'interaction-actions';
+  for (const [label, cls, onClick] of buttons) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = cls; b.textContent = label; b.onclick = onClick;
+    row.appendChild(b);
+  }
+  return row;
+}
+
+function buildInteractionBody(card, req) {
+  const head = document.createElement('div'); head.className = 'interaction-head';
+  if (req.kind === 'permission') {
+    head.textContent = 'Permission requested';
+    const sub = document.createElement('div'); sub.className = 'interaction-sub';
+    sub.textContent = req.toolName ? `Claude wants to use ${req.toolName}` : 'Claude is requesting permission';
+    const pre = document.createElement('pre'); pre.className = 'interaction-input';
+    pre.textContent = req.input == null ? '' : JSON.stringify(req.input, null, 2);
+    card.append(head, sub, pre, interactionActions([
+      ['Allow once', 'btn-allow', () => answerInteraction('allow')],
+      ["Allow, don't ask again", 'btn-allow2', () => answerInteraction('allow-always')],
+      ['Deny', 'btn-deny', () => answerInteraction('deny')],
+    ]));
+  } else if (req.kind === 'plan') {
+    head.textContent = 'Plan ready for review';
+    const pre = document.createElement('pre'); pre.className = 'interaction-input'; pre.textContent = req.plan || '(no plan text)';
+    card.append(head, pre, interactionActions([
+      ['Approve', 'btn-allow', () => answerInteraction('approve')],
+      ['Approve & auto-accept edits', 'btn-allow2', () => answerInteraction('approve-auto')],
+      ['Keep planning', 'btn-deny', () => answerInteraction('keep-planning')],
+    ]));
+  } else if (req.kind === 'question') {
+    head.textContent = 'Claude is asking';
+    card.appendChild(head);
+    const questions = req.questions || [];
+    const selections = questions.map((q) => (q.multiSelect ? [] : null));
+    questions.forEach((q, qi) => {
+      const block = document.createElement('div'); block.className = 'interaction-q';
+      const qhead = document.createElement('div'); qhead.className = 'interaction-qhead';
+      qhead.textContent = q.header ? `${q.header}: ${q.question}` : q.question;
+      block.appendChild(qhead);
+      for (const opt of (q.options || [])) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'interaction-opt';
+        b.textContent = opt.label + (opt.description ? ` — ${opt.description}` : '');
+        b.onclick = () => {
+          if (q.multiSelect) {
+            const arr = selections[qi]; const ix = arr.indexOf(opt.label);
+            if (ix >= 0) { arr.splice(ix, 1); b.classList.remove('sel'); } else { arr.push(opt.label); b.classList.add('sel'); }
+          } else {
+            selections[qi] = opt.label;
+            for (const sib of block.querySelectorAll('.interaction-opt')) sib.classList.remove('sel');
+            b.classList.add('sel');
+          }
+        };
+        block.appendChild(b);
+      }
+      card.appendChild(block);
+    });
+    card.appendChild(interactionActions([
+      ['Submit', 'btn-allow', () => answerInteraction({ answers: questions.map((q, qi) => ({ question: q.question, header: q.header, answer: selections[qi] })) })],
+    ]));
+  } else if (req.kind === 'elicitation') {
+    const rq = req.request || {};
+    head.textContent = rq.title || 'Input requested';
+    const msg = document.createElement('div'); msg.className = 'interaction-sub'; msg.textContent = rq.message || '';
+    card.append(head, msg);
+    const content = {};
+    if (rq.mode === 'url' && rq.url) {
+      const a = document.createElement('a'); a.href = rq.url; a.target = '_blank'; a.rel = 'noopener'; a.className = 'interaction-url'; a.textContent = rq.url;
+      card.appendChild(a);
+    } else if (rq.requestedSchema && rq.requestedSchema.properties) {
+      for (const [key, sch] of Object.entries(rq.requestedSchema.properties)) {
+        const wrap = document.createElement('label'); wrap.className = 'interaction-field';
+        wrap.textContent = (sch && sch.title) || key;
+        const inp = document.createElement('input'); inp.type = 'text';
+        inp.oninput = () => { content[key] = inp.value; };
+        wrap.appendChild(inp); card.appendChild(wrap);
+      }
+    }
+    card.appendChild(interactionActions([
+      ['Submit', 'btn-allow', () => answerInteraction({ action: 'accept', content })],
+      ['Decline', 'btn-deny', () => answerInteraction({ action: 'decline' })],
+    ]));
+  } else {
+    head.textContent = 'Waiting for your input';
+    card.append(head, interactionActions([['Dismiss', 'btn-deny', () => answerInteraction('deny')]]));
+  }
+}
+
+function openInteractionModal(req) {
+  closeInteractionModal();
+  currentInteraction = req;
+  const overlay = document.createElement('div'); overlay.className = 'interaction-overlay';
+  const card = document.createElement('div'); card.className = 'interaction-card';
+  buildInteractionBody(card, req);
+  overlay.appendChild(card);
+  guiPaneEl.appendChild(overlay);
+  interactionOverlay = overlay;
 }
 
 document.addEventListener('click', closeContextMenu);
