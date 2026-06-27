@@ -5,6 +5,7 @@ const ws = new WebSocket(`ws://${location.host}`);
 let sessions = [];
 let focusedId = null;
 let ctxMenuEl = null;
+let modeMenuEl = null;
 
 // Quick-preview state: a read-only GUI view of any session, kept live via the
 // gui-delta broadcast (never focuses/acknowledges the session).
@@ -149,7 +150,16 @@ const claudeModeEl = document.getElementById('claude-mode');
 const interruptBtn = document.getElementById('interrupt-btn');
 const usageEl = document.getElementById('usage-chip');
 const modelSelect = document.getElementById('model-select');
-const MODE_CYCLE = ['default', 'acceptEdits', 'plan'];
+// All six permission modes, each with a one-line explanation shown as a hover
+// tooltip on a ? icon in the dropdown.
+const MODES = [
+  ['default', 'Prompts for anything not pre-approved.'],
+  ['acceptEdits', 'Auto-accepts file edits; other tools still prompt.'],
+  ['plan', 'Explore and plan only; never executes edits.'],
+  ['bypassPermissions', 'Approves everything that reaches the gate (your deny-rules still apply).'],
+  ['dontAsk', 'Never prompts; denies anything not pre-approved.'],
+  ['auto', 'A model classifier approves or denies each call.'],
+];
 // Mode chip from the init message's permission mode; usage from the result
 // message's token totals; model from init/setModel. All arrive as {type:'meta'}.
 function renderMeta(meta) {
@@ -164,14 +174,28 @@ function renderMeta(meta) {
 }
 // Interrupt the running turn.
 if (interruptBtn) interruptBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'interrupt', id: focusedId })); };
-// Cycle the permission mode (default -> acceptEdits -> plan); the server echoes
-// the new mode back as meta, which updates the chip.
-if (claudeModeEl) claudeModeEl.onclick = () => {
-  if (!focusedId) return;
+// The mode chip opens a dropdown of all six modes (each with a ? tooltip);
+// picking one sends set-permission-mode and the server echoes meta to update it.
+function closeModeMenu() { if (modeMenuEl) { modeMenuEl.remove(); modeMenuEl = null; } }
+function openModeMenu() {
+  closeModeMenu();
+  if (!focusedId || !claudeModeEl) return;
+  const menu = document.createElement('div'); menu.className = 'mode-menu';
   const cur = claudeModeEl.textContent.trim();
-  const next = MODE_CYCLE[(MODE_CYCLE.indexOf(cur) + 1) % MODE_CYCLE.length];
-  ws.send(JSON.stringify({ type: 'set-permission-mode', id: focusedId, mode: next }));
-};
+  for (const [mode, tip] of MODES) {
+    const row = document.createElement('div'); row.className = 'mode-menu-row' + (mode === cur ? ' active' : '');
+    const name = document.createElement('button'); name.type = 'button'; name.className = 'mode-menu-name'; name.textContent = mode;
+    name.onclick = () => { ws.send(JSON.stringify({ type: 'set-permission-mode', id: focusedId, mode })); closeModeMenu(); };
+    const help = document.createElement('span'); help.className = 'mode-menu-help'; help.textContent = '?'; help.title = tip;
+    row.append(name, help); menu.appendChild(row);
+  }
+  document.body.appendChild(menu);
+  const rect = claudeModeEl.getBoundingClientRect();
+  menu.style.left = Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8) + 'px';
+  menu.style.top = (rect.bottom + 4) + 'px';
+  modeMenuEl = menu;
+}
+if (claudeModeEl) claudeModeEl.onclick = (e) => { e.stopPropagation(); openModeMenu(); };
 // Switch the model.
 if (modelSelect) modelSelect.onchange = () => { if (focusedId) ws.send(JSON.stringify({ type: 'set-model', id: focusedId, model: modelSelect.value })); };
 // Doc buttons: open the focused session's local-docs.md / TODO.md via the OS default app.
@@ -800,5 +824,5 @@ function openInteractionModal(req) {
   interactionOverlay = overlay;
 }
 
-document.addEventListener('click', closeContextMenu);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeContextMenu(); closePreview(); } });
+document.addEventListener('click', () => { closeContextMenu(); closeModeMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeContextMenu(); closePreview(); closeModeMenu(); } });

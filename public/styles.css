@@ -50,6 +50,14 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .interaction-field { display: block; color: #ddd; font-size: 12px; margin: 6px 0; }
 .interaction-field input { display: block; width: 100%; margin-top: 2px; background: #1e1e1e; color: #ddd; border: 1px solid #3c3c3c; border-radius: 4px; padding: 4px; }
 .interaction-url { color: #9cdcfe; word-break: break-all; }
+/* Permission-mode dropdown (all six modes + a ? tooltip per entry). */
+.mode-menu { position: fixed; z-index: 70; background: #252526; border: 1px solid #4a4a50; border-radius: 6px; padding: 4px; box-shadow: 0 6px 24px rgba(0,0,0,0.5); min-width: 210px; }
+.mode-menu-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 1px; border-radius: 4px; }
+.mode-menu-row.active { background: #094771; }
+.mode-menu-name { flex: 1; text-align: left; background: none; border: none; color: #ddd; cursor: pointer; font-size: 12px; padding: 4px 6px; }
+.mode-menu-name:hover { color: #fff; }
+.mode-menu-help { flex: 0 0 auto; width: 16px; height: 16px; line-height: 16px; text-align: center; border-radius: 50%; background: #3c3c3c; color: #aaa; font-size: 11px; cursor: help; }
+.mode-menu-help:hover { background: #4a4a50; color: #fff; }
 #interrupt-btn { flex: 0 0 auto; background: #5a2d2d; color: #fff; border: none; border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
 #interrupt-btn:hover { background: #7a3a3a; }
 #interrupt-btn[hidden] { display: none; }
