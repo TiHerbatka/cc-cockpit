@@ -81,10 +81,7 @@ window.addEventListener('unhandledrejection', (e) => { const r = e.reason; error
 const headLabel = document.getElementById('head-label');
 const headState = document.getElementById('head-state');
 const guiPaneEl = document.getElementById('gui-pane');
-const modeSwitchBtns = [...document.querySelectorAll('#mode-switch button')];
-const modeById = new Map();              // sessionId -> 'gui' | 'terminal'
-const modeOf = (id) => modeById.get(id) || 'gui'; // GUI is the default mode
-let guiWatchedId = null;                 // session currently gui-attached (tailing)
+let guiWatchedId = null;                 // session currently gui-attached
 
 // One GUI controller, mounted once; re-pointed at the focused session.
 const gui = mountGui(guiPaneEl, {
@@ -106,33 +103,23 @@ const gui = mountGui(guiPaneEl, {
   },
 });
 
-// Sending a compose message to a *freshly opened* session is unreliable: the text
-// reaches Claude's input box but the Enter is dropped while the TUI is still
-// initializing, so the prompt sits unsent. Fix: after sending "text\r", nudge a
-// bare \r every ~1.3s until the prompt is confirmed submitted (the sent text shows
-// up in a gui-snapshot). A ready session submits on the first \r and the next
-// snapshot clears the nudge before any timer fires — so no spurious enters; a
-// stray \r at an empty prompt is a harmless no-op anyway.
-let pendingSubmit = null;   // { id, text, tries }
-let pendingTimer = null;
-function clearPendingSubmit() { if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; } pendingSubmit = null; }
-function scheduleSubmitNudge() {
-  pendingTimer = setTimeout(() => {
-    pendingTimer = null;
-    if (!pendingSubmit) return;
-    if (pendingSubmit.tries >= 3) { pendingSubmit = null; return; }
-    pendingSubmit.tries += 1;
-    ws.send(JSON.stringify({ type: 'input', id: pendingSubmit.id, data: '\r' }));
-    scheduleSubmitNudge();
-  }, 1300);
-}
+// Send a user turn as ONE structured message over the SDK channel — no keystroke
+// emulation, no carriage return, no nudge timer (the old PTY race is gone).
 function composeSend(text) {
   if (!focusedId) return;
-  const id = focusedId;
-  ws.send(JSON.stringify({ type: 'input', id, data: text + '\r' }));
-  clearPendingSubmit();
-  pendingSubmit = { id, text: text.trim(), tries: 0 };
-  scheduleSubmitNudge();
+  ws.send(JSON.stringify({ type: 'send', id: focusedId, text }));
+}
+
+// The focused session's render model, kept in sync from a gui-snapshot (full) plus
+// gui-delta ops; re-rendered via the GUI controller.
+let guiModel = null;
+function applyDelta(model, ops) {
+  for (const op of ops || []) {
+    if (op.op === 'append') model.items.push(op.item);
+    else if (op.op === 'update') { const it = model.items.find((i) => i.kind === 'tool' && i.id === op.id); if (it) Object.assign(it, op.patch); }
+    else if (op.op === 'title') model.title = op.title;
+    else if (op.op === 'status') model.status = op.status;
+  }
 }
 
 // Read a File/Blob as a base64 string (the raw payload, without the data-URL prefix).
@@ -150,30 +137,13 @@ function detachGui() {
   gui.clear();
 }
 
+// SDK sessions are GUI-only this phase (raw terminal returns as a deliberate
+// option later). Always mount the GUI pane and attach its live stream.
 function applyMode(id) {
   if (id !== focusedId) return;
-  const mode = modeOf(id);
-  for (const b of modeSwitchBtns) b.classList.toggle('active', b.dataset.mode === mode);
-  if (mode === 'gui') {
-    guiPaneEl.hidden = false;
-    if (guiWatchedId !== id) { detachGui(); ws.send(JSON.stringify({ type: 'gui-attach', id })); guiWatchedId = id; }
-    gui.focusCompose();
-  } else {
-    guiPaneEl.hidden = true;
-    detachGui();
-    fit.fit(); sendResize();
-    // Refresh the terminal with the session's current buffer on activation — a
-    // full-screen TUI can otherwise show a stale frame after being overlaid by
-    // the GUI pane. attach replays the ring buffer (and re-acknowledges, fine).
-    ws.send(JSON.stringify({ type: 'attach', id }));
-    term.focus();
-  }
-}
-
-function setMode(id, mode) {
-  modeById.set(id, mode);
-  ws.send(JSON.stringify({ type: 'set-mode', id, mode }));
-  if (id === focusedId) applyMode(id);
+  guiPaneEl.hidden = false;
+  if (guiWatchedId !== id) { detachGui(); ws.send(JSON.stringify({ type: 'gui-attach', id })); guiWatchedId = id; }
+  gui.focusCompose();
 }
 
 function updateHead() {
@@ -181,63 +151,25 @@ function updateHead() {
   headLabel.textContent = s ? s.label : '';
   headState.className = 'icon ' + (s ? s.status : '');
   headState.textContent = s ? (STATE_ICON[s.status] || '○') : '';
-  // Interrupt button is available only while a turn is running.
-  if (interruptBtn) interruptBtn.hidden = !(s && s.status === 'working');
   // Push the focused session's tracked topics to the GUI panel.
   gui.setTopics(s ? s.topics : []);
 }
 
-// ---- Footer-derived chips: Claude mode + usage (ctx/5h/7d) ------------------
+// ---- Chips: Claude permission mode + usage, re-sourced from the SDK stream ----
 const claudeModeEl = document.getElementById('claude-mode');
 const interruptBtn = document.getElementById('interrupt-btn');
 const usageEl = document.getElementById('usage-chip');
-// The mode and usage are only shown in the TUI footer. xterm has already parsed
-// the ANSI and its grid reflects the current screen (even while the GUI pane
-// overlays it), so reading the bottom rows gives the live footer — and absence of
-// a mode banner reliably means "normal".
-function readFooter() {
-  try {
-    const buf = term.buffer.active;
-    const rows = [];
-    const start = Math.max(0, buf.length - 12);
-    for (let i = start; i < buf.length; i++) {
-      const ln = buf.getLine(i);
-      rows.push(ln ? ln.translateToString(true) : '');
-    }
-    return rows.join('\n');
-  } catch { return ''; }
-}
-function renderUsage(footer) {
-  if (!usageEl) return;
-  const u = window.parseUsage(footer);
-  const pc = (p) => (p == null ? '' : (p < 60 ? 'u-green' : p < 85 ? 'u-yellow' : 'u-red'));
-  const seg = (cls, txt) => { const el = document.createElement('span'); if (cls) el.className = cls; el.textContent = txt; return el; };
-  const segs = [];
-  if (u.ctx != null) segs.push(seg(pc(u.ctx), `ctx ${u.ctx}%`));
-  if (u.fiveHourPct != null) segs.push(seg(pc(u.fiveHourPct), `5h ${u.fiveHourPct}%${u.fiveHourRel ? ` (${u.fiveHourRel} left · resets ${u.fiveHourReset})` : ''}`));
-  if (u.sevenDayPct != null) segs.push(seg(pc(u.sevenDayPct), `7d ${u.sevenDayPct}%`));
-  usageEl.textContent = '';
-  segs.forEach((s, i) => { if (i) usageEl.appendChild(document.createTextNode(' · ')); usageEl.appendChild(s); });
-}
-let footerTimer = null;
-function refreshClaudeMode() { // refreshes both the mode chip and the usage chip
-  if (footerTimer) return;
-  footerTimer = setTimeout(() => {
-    footerTimer = null;
-    const footer = readFooter();
-    if (claudeModeEl) claudeModeEl.textContent = window.parseClaudeMode(footer);
-    renderUsage(footer);
-  }, 150);
-}
-if (claudeModeEl) {
-  claudeModeEl.onclick = () => {
-    if (!focusedId) return;
-    ws.send(JSON.stringify({ type: 'input', id: focusedId, data: '\x1b[Z' })); // Shift+Tab cycles the mode
-    setTimeout(refreshClaudeMode, 250); // re-read after the footer redraws
-  };
-}
-if (interruptBtn) {
-  interruptBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'input', id: focusedId, data: '\x1b' })); };
+if (interruptBtn) interruptBtn.hidden = true; // graceful interrupt is a deferred control
+// The mode chip comes from the init message's permission mode; usage from the
+// result message's token totals. Both arrive as {type:'meta'} over the socket.
+function renderMeta(meta) {
+  if (meta.mode && claudeModeEl) claudeModeEl.textContent = meta.mode;
+  if (meta.usage && usageEl) {
+    const u = meta.usage;
+    const inTok = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+    const k = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
+    usageEl.textContent = `tok ${k(inTok)}↓ ${k(u.output_tokens || 0)}↑`;
+  }
 }
 // Doc buttons: open the focused session's local-docs.md / TODO.md via the OS default app.
 const openDocsBtn = document.getElementById('open-docs');
@@ -245,10 +177,9 @@ const openTodoBtn = document.getElementById('open-todo');
 if (openDocsBtn) openDocsBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'open-file', id: focusedId, which: 'docs' })); };
 if (openTodoBtn) openTodoBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'open-file', id: focusedId, which: 'todo' })); };
 
-modeSwitchBtns.forEach((b) => { b.onclick = () => { if (focusedId) setMode(focusedId, b.dataset.mode); }; });
-document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.key === '`') { e.preventDefault(); if (focusedId) setMode(focusedId, modeOf(focusedId) === 'gui' ? 'terminal' : 'gui'); }
-});
+// Terminal mode returns as a deliberate option later; hide its switch for now.
+const modeSwitchEl = document.getElementById('mode-switch');
+if (modeSwitchEl) modeSwitchEl.hidden = true;
 
 // Distinct shape per state (not just color); working spins, needs-you pulses.
 const STATE_ICON = { working: '⚙︎', 'needs-you': '▲', 'your-move': '●', idle: '○', exited: '✕' };
@@ -309,15 +240,12 @@ function removeSession(s) {
 function focus(id) {
   focusedId = id;
   errorEl.textContent = '';
-  // attach still acknowledges the session and replays its buffer into the
-  // (possibly hidden) terminal, so Terminal mode is instant and a focus always
-  // clears a needs-you/your-move signal regardless of mode.
+  guiModel = null; // reset until the new session's snapshot arrives
+  // attach acknowledges the session (clearing a your-move signal) and triggers a
+  // gui-snapshot of its current model.
   ws.send(JSON.stringify({ type: 'attach', id }));
-  sendResize();
   render();
   updateHead();
-  // Mount the right surface for this session's mode (GUI default). In terminal
-  // mode applyMode moves keyboard focus to the terminal; in GUI mode to compose.
   applyMode(id);
 }
 
@@ -325,42 +253,15 @@ ws.addEventListener('message', (ev) => {
   const m = JSON.parse(ev.data);
   if (m.type === 'sessions') {
     sessions = m.sessions;
-    // Hide the permission panel once the focused session is no longer waiting
-    // (answered here or in the terminal, or the turn moved on).
-    const fsess = sessions.find((s) => s.id === focusedId);
-    if (fsess && fsess.status !== 'needs-you') gui.hidePermission();
     if (!focusedId && sessions.length) focus(sessions[0].id);
     else { render(); updateHead(); }
-  } else if (m.type === 'gui-snapshot' && m.id === focusedId && m.id === guiWatchedId) {
-    gui.update(m.model);
-    // Confirm a pending compose submission landed (so we stop nudging \r).
-    if (pendingSubmit && pendingSubmit.id === m.id && pendingSubmit.text) {
-      const users = (m.model.items || []).filter((i) => i.kind === 'user');
-      const last = users[users.length - 1];
-      if (last && last.text && last.text.includes(pendingSubmit.text)) clearPendingSubmit();
-    }
-  } else if (m.type === 'permission-request' && m.id === focusedId && modeOf(m.id) === 'gui') {
-    gui.showPermission({ tool: m.tool, input: m.input }, (key) => {
-      ws.send(JSON.stringify({ type: 'permission-answer', id: m.id, key }));
-    });
-  } else if (m.type === 'attached' && m.id === focusedId) {
-    term.reset();
-    term.write(m.buffer);
-    refreshClaudeMode();
-  } else if (m.type === 'peeked' && m.id === previewId && previewTerm) {
-    // Match the preview terminal to the session's PTY grid so the (size-specific)
-    // stream replays faithfully; otherwise a TUI's frame scrolls out of view. Scale
-    // the font so that whole grid fits the modal in both dimensions — no scrollbars.
-    if (m.cols && m.rows) {
-      previewCols = m.cols; previewRows = m.rows;
-      fitPreviewFont(m.cols, m.rows);
-      previewTerm.resize(m.cols, m.rows);
-    }
-    previewTerm.reset();
-    previewTerm.write(m.buffer);
-  } else if (m.type === 'output') {
-    if (m.id === focusedId) { term.write(m.data); refreshClaudeMode(); }
-    if (m.id === previewId && previewTerm) previewTerm.write(m.data);
+  } else if (m.type === 'gui-snapshot' && m.id === focusedId) {
+    guiModel = m.model;
+    gui.update(guiModel);
+  } else if (m.type === 'gui-delta' && m.id === focusedId) {
+    if (guiModel) { applyDelta(guiModel, m.ops); gui.update(guiModel); }
+  } else if (m.type === 'meta' && m.id === focusedId) {
+    renderMeta(m);
   } else if (m.type === 'error') {
     errorEl.textContent = m.message;
     errorCenter.add('Server: ' + m.message);
@@ -368,10 +269,6 @@ ws.addEventListener('message', (ev) => {
 });
 ws.addEventListener('error', () => errorCenter.add('WebSocket connection error'));
 ws.addEventListener('close', () => errorCenter.add('WebSocket disconnected'));
-
-term.onData((data) => {
-  if (focusedId) ws.send(JSON.stringify({ type: 'input', id: focusedId, data }));
-});
 
 function openModal(build) {
   const overlay = document.createElement('div');
@@ -656,7 +553,6 @@ function openContextMenu(x, y, s) {
   const menu = document.createElement('div');
   menu.className = 'ctx-menu';
   const items = [
-    { label: 'Quick preview', act: () => openPreview(s) },
     { label: 'Open folder', act: () => ws.send(JSON.stringify({ type: 'open-folder', id: s.id })) },
     { label: 'Rename', act: () => openRenameModal(s) },
   ];
