@@ -6,12 +6,16 @@ const { SessionRegistry } = require('../server/sessions');
 // registers onMessage/onExit/onError synchronously in create(), so a test drives
 // the stream via driver._msg(...) / driver._exit() / driver._error(...).
 function makeFakeDriver() {
-  const o = { written: [], killed: false, interrupted: false, _msg: null, _exit: null, _error: null };
+  const o = { written: [], killed: false, interrupted: false, answered: [], modeSet: [], modelSet: [], _msg: null, _exit: null, _error: null, _perm: null };
   o.onMessage = (cb) => { o._msg = cb; };
   o.onExit = (cb) => { o._exit = cb; };
   o.onError = (cb) => { o._error = cb; };
+  o.onPermission = (cb) => { o._perm = cb; };
   o.write = (t) => o.written.push(t);
+  o.answerPermission = (tid, dec) => o.answered.push([tid, dec]);
   o.interrupt = () => { o.interrupted = true; };
+  o.setPermissionMode = (m) => o.modeSet.push(m);
+  o.setModel = (m) => o.modelSet.push(m);
   o.kill = () => { o.killed = true; };
   return o;
 }
@@ -105,13 +109,68 @@ test('an assistant message emits a delta and updates the model', () => {
   assert.deepStrictEqual(reg.modelOf(s.id).items, [{ kind: 'assistant', text: 'hello' }]);
 });
 
-test('an init message emits meta with the permission mode', () => {
+test('an init message emits meta with the permission mode and model', () => {
   const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/proj/a');
   const metas = [];
   reg.on('meta', (id, meta) => metas.push([id, meta]));
   drivers[0]._msg(init('default'));
-  assert.deepStrictEqual(metas, [[s.id, { mode: 'default' }]]);
+  assert.deepStrictEqual(metas, [[s.id, { mode: 'default', model: 'm' }]]);
+});
+
+test('a permission request flags needs-you, records pending, and emits permission', () => {
+  const { reg, drivers } = makeRegistry();
+  const s = reg.create('C:/proj/a'); // unfocused
+  const perms = [];
+  reg.on('permission', (id, req) => perms.push([id, req]));
+  const req = { toolName: 'Write', input: { file_path: 'x' }, toolUseId: 't1', suggestions: [] };
+  drivers[0]._perm(req);
+  assert.strictEqual(reg.get(s.id).status, 'needs-you');
+  assert.deepStrictEqual(reg.pendingPermissionOf(s.id), req);
+  assert.deepStrictEqual(perms, [[s.id, req]]);
+});
+
+test('answerPermission resolves via the driver, clears pending, and resumes working', () => {
+  const { reg, drivers } = makeRegistry();
+  const s = reg.create('C:/proj/a');
+  drivers[0]._perm({ toolName: 'Write', input: {}, toolUseId: 't1', suggestions: [] });
+  reg.answerPermission(s.id, 't1', 'allow');
+  assert.deepStrictEqual(drivers[0].answered, [['t1', 'allow']]);
+  assert.strictEqual(reg.pendingPermissionOf(s.id), null);
+  assert.strictEqual(reg.get(s.id).status, 'working');
+});
+
+test('interrupt / setPermissionMode / setModel route to the driver; mode+model emit meta', () => {
+  const { reg, drivers } = makeRegistry();
+  const s = reg.create('C:/proj/a');
+  const metas = [];
+  reg.on('meta', (id, m) => metas.push(m));
+  reg.interrupt(s.id);
+  reg.setPermissionMode(s.id, 'plan');
+  reg.setModel(s.id, 'claude-sonnet-4-6');
+  assert.strictEqual(drivers[0].interrupted, true);
+  assert.deepStrictEqual(drivers[0].modeSet, ['plan']);
+  assert.deepStrictEqual(drivers[0].modelSet, ['claude-sonnet-4-6']);
+  assert.ok(metas.some((m) => m.mode === 'plan'));
+  assert.ok(metas.some((m) => m.model === 'claude-sonnet-4-6'));
+});
+
+test('resume seeds the conversation model from loaded transcript records', () => {
+  const records = [
+    { type: 'user', message: { role: 'user', content: 'earlier prompt' } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'earlier reply' }] } },
+  ];
+  const drivers = [];
+  const reg = new SessionRegistry({
+    spawnDriver: () => { const d = makeFakeDriver(); drivers.push(d); return d; },
+    projectsRoot: 'C:/root',
+    loadResumeRecords: () => records,
+  });
+  const s = reg.create('C:/proj/a', { resumeId: 'resume-1' });
+  assert.deepStrictEqual(reg.modelOf(s.id).items, [
+    { kind: 'user', text: 'earlier prompt' },
+    { kind: 'assistant', text: 'earlier reply' },
+  ]);
 });
 
 test('a result message emits meta with usage', () => {

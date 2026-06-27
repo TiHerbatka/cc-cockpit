@@ -3,8 +3,9 @@
 // substrate. Each cockpit session owns one durable streaming query() (a child
 // claude the SDK spawns and owns over stdio), authenticated on the user's own
 // Claude Code subscription. This module owns: subscription-only env
-// construction, the streaming-input queue, the posture-A permission callback,
-// the raw-message event source, and teardown.
+// construction, the streaming-input queue, the GUI permission callback (parks a
+// gated tool until the user answers), the control methods (interrupt / mode /
+// model), the raw-message event source, and teardown.
 // Strip the parent Claude Code session's markers so a spawned child launches like
 // a fresh top-level session (else it would treat itself as a nested child and not
 // persist a transcript). The cockpit's own CC_COCKPIT_* vars are a separate
@@ -77,16 +78,6 @@ function makeInputQueue() {
   };
 }
 
-// Posture A: load the user's settings (their allow/deny rules apply); auto-approve
-// anything not covered so nothing stalls; decline the two interactive prompts that
-// aren't allow/deny gates (their rich UI is the deferred controls phase).
-async function postureAPermission(toolName, input) {
-  if (toolName === 'AskUserQuestion' || toolName === 'ExitPlanMode') {
-    return { behavior: 'deny', message: 'Interactive prompts are not available in this session yet — proceed with your best judgment.' };
-  }
-  return { behavior: 'allow', updatedInput: input };
-}
-
 function defaultQuery() {
   // Lazy: only required when actually spawning a real session, so unit tests that
   // inject a fake query never load the SDK (which need not be installed for tests).
@@ -100,8 +91,27 @@ function createSdkDriver(cwd, id, opts = {}, deps = {}) {
   const messageCbs = [];
   const exitCbs = [];
   const errorCbs = [];
+  const permissionCbs = [];
+  const pending = new Map(); // toolUseId -> { resolve, input, suggestions }
+  let permSeq = 0;
   const ac = new AbortController();
   const input = makeInputQueue();
+
+  // Surface a gated tool to the GUI and await the user's answer (resolved later via
+  // answerPermission). AskUserQuestion / ExitPlanMode aren't allow/deny gates —
+  // decline them (their rich answer-UI is a separate, deferred feature). Tools the
+  // user's loaded settings already allow never reach this callback.
+  const canUseTool = (toolName, toolInput, options = {}) => {
+    if (toolName === 'AskUserQuestion' || toolName === 'ExitPlanMode') {
+      return Promise.resolve({ behavior: 'deny', message: 'Interactive prompts are not available in this session yet — proceed with your best judgment.' });
+    }
+    return new Promise((resolve) => {
+      const toolUseId = options.toolUseID || `perm-${++permSeq}`;
+      const suggestions = options.suggestions || [];
+      pending.set(toolUseId, { resolve, input: toolInput, suggestions });
+      for (const cb of permissionCbs) cb({ toolName, input: toolInput, toolUseId, suggestions });
+    });
+  };
 
   const q = query({
     prompt: input,
@@ -110,7 +120,7 @@ function createSdkDriver(cwd, id, opts = {}, deps = {}) {
       env: scrubChildEnv({ ...process.env }),
       permissionMode: 'default',
       settingSources: ['user', 'project', 'local'],
-      canUseTool: postureAPermission,
+      canUseTool,
       abortController: ac,
       resume: opts.resumeId || undefined,
     },
@@ -130,8 +140,21 @@ function createSdkDriver(cwd, id, opts = {}, deps = {}) {
     onMessage: (cb) => messageCbs.push(cb),
     onExit: (cb) => exitCbs.push(cb),
     onError: (cb) => errorCbs.push(cb),
+    onPermission: (cb) => permissionCbs.push(cb),
     write: (text) => input.push({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null }),
+    // Resolve a parked permission with the user's decision (allow / allow-always /
+    // deny). allow-always persists the SDK's suggested rule(s) if any were offered.
+    answerPermission: (toolUseId, decision) => {
+      const p = pending.get(toolUseId);
+      if (!p) return;
+      pending.delete(toolUseId);
+      if (decision === 'deny') p.resolve({ behavior: 'deny', message: 'Denied by the user.' });
+      else if (decision === 'allow-always' && p.suggestions.length) p.resolve({ behavior: 'allow', updatedInput: p.input, updatedPermissions: p.suggestions });
+      else p.resolve({ behavior: 'allow', updatedInput: p.input });
+    },
     interrupt: () => { try { if (q && typeof q.interrupt === 'function') return q.interrupt(); } catch { /* ignore */ } },
+    setPermissionMode: (mode) => { try { if (q && typeof q.setPermissionMode === 'function') return q.setPermissionMode(mode); } catch { /* ignore */ } },
+    setModel: (model) => { try { if (q && typeof q.setModel === 'function') return q.setModel(model); } catch { /* ignore */ } },
     kill: () => { try { ac.abort(); } catch { /* ignore */ } input.close(); },
   };
 }

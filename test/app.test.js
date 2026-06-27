@@ -12,12 +12,16 @@ const { createApp } = require('../server/app');
 function fakeDriverFactory() {
   const drivers = [];
   const factory = () => {
-    const o = { written: [], killed: false, _msg: null, _exit: null, _error: null };
+    const o = { written: [], killed: false, interrupted: false, answered: [], modeSet: [], modelSet: [], _msg: null, _exit: null, _error: null, _perm: null };
     o.onMessage = (cb) => { o._msg = cb; };
     o.onExit = (cb) => { o._exit = cb; };
     o.onError = (cb) => { o._error = cb; };
+    o.onPermission = (cb) => { o._perm = cb; };
     o.write = (t) => o.written.push(t);
-    o.interrupt = () => {};
+    o.answerPermission = (tid, dec) => o.answered.push([tid, dec]);
+    o.interrupt = () => { o.interrupted = true; };
+    o.setPermissionMode = (m) => o.modeSet.push(m);
+    o.setModel = (m) => o.modelSet.push(m);
     o.kill = () => { o.killed = true; };
     drivers.push(o);
     return o;
@@ -241,6 +245,60 @@ test('a driver error is surfaced to the client as an error message', async () =>
 
   ws.close();
   await new Promise((r) => server.close(r));
+});
+
+test('a permission request is broadcast and the answer reaches the driver', async () => {
+  const { factory, drivers } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
+  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
+  const id = (await created).sessions[0].id;
+
+  const permReq = nextMessage(ws, (m) => m.type === 'permission-request' && m.id === id);
+  drivers[0]._perm({ toolName: 'Write', input: { file_path: 'x' }, toolUseId: 't1', suggestions: [] });
+  const r = await permReq;
+  assert.strictEqual(r.toolName, 'Write');
+  assert.strictEqual(r.toolUseId, 't1');
+
+  ws.send(JSON.stringify({ type: 'permission-answer', id, toolUseId: 't1', decision: 'deny' }));
+  const snap = nextMessage(ws, (m) => m.type === 'gui-snapshot' && m.id === id); // attach ordering
+  ws.send(JSON.stringify({ type: 'attach', id }));
+  await snap;
+  assert.deepStrictEqual(drivers[0].answered, [['t1', 'deny']]);
+
+  ws.close();
+  await new Promise((r2) => server.close(r2));
+});
+
+test('interrupt / set-permission-mode / set-model reach the driver', async () => {
+  const { factory, drivers } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
+  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
+  const id = (await created).sessions[0].id;
+
+  ws.send(JSON.stringify({ type: 'interrupt', id }));
+  ws.send(JSON.stringify({ type: 'set-permission-mode', id, mode: 'plan' }));
+  ws.send(JSON.stringify({ type: 'set-model', id, model: 'claude-sonnet-4-6' }));
+  const snap = nextMessage(ws, (m) => m.type === 'gui-snapshot' && m.id === id); // attach ordering
+  ws.send(JSON.stringify({ type: 'attach', id }));
+  await snap;
+  assert.strictEqual(drivers[0].interrupted, true);
+  assert.deepStrictEqual(drivers[0].modeSet, ['plan']);
+  assert.deepStrictEqual(drivers[0].modelSet, ['claude-sonnet-4-6']);
+
+  ws.close();
+  await new Promise((r2) => server.close(r2));
 });
 
 test('peek returns the session model without acknowledging or focusing', async () => {

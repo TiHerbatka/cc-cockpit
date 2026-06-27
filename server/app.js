@@ -8,6 +8,7 @@ const { SessionRegistry } = require('./sessions');
 const projects = require('./projects');
 const recent = require('./recent');
 const { readTopics } = require('./topics');
+const { findTranscriptPath } = require('./transcript');
 const uploads = require('./uploads');
 
 const DEFAULT_PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -32,7 +33,20 @@ const MIME = {
 };
 
 function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot = projects.projectsRoot(), claudeDir, openInExplorer = defaultOpenInExplorer, openFile = defaultOpenFile } = {}) {
-  const registry = new SessionRegistry({ spawnDriver, projectsRoot });
+  // On resume, read the prior transcript so the registry can seed the model.
+  const loadResumeRecords = (ccSessionId) => {
+    try {
+      const p = findTranscriptPath(ccSessionId, { claudeDir });
+      if (!p) return [];
+      const records = [];
+      for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
+        const t = line.trim(); if (!t) continue;
+        try { records.push(JSON.parse(t)); } catch { /* skip unparseable */ }
+      }
+      return records;
+    } catch { return []; }
+  };
+  const registry = new SessionRegistry({ spawnDriver, projectsRoot, loadResumeRecords });
 
   const server = http.createServer((req, res) => {
     let urlPath = decodeURIComponent(req.url.split('?')[0]);
@@ -136,6 +150,7 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
   registry.on('meta', (id, meta) => broadcast({ type: 'meta', id, ...meta }));
   registry.on('sessions', () => broadcast({ type: 'sessions', sessions: registry.list() }));
   registry.on('session-error', (id, message) => broadcast({ type: 'error', message }));
+  registry.on('permission', (id, req) => broadcast({ type: 'permission-request', id, ...req }));
 
   // Send the focused session's current model as a full snapshot (attach/re-point).
   const sendSnapshot = (ws, id) => {
@@ -161,9 +176,20 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
         catch (e) { ws.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); }
       } else if (m.type === 'send') {
         registry.send(m.id, m.text);
+      } else if (m.type === 'permission-answer') {
+        registry.answerPermission(m.id, m.toolUseId, m.decision);
+      } else if (m.type === 'interrupt') {
+        registry.interrupt(m.id);
+      } else if (m.type === 'set-permission-mode') {
+        registry.setPermissionMode(m.id, m.mode);
+      } else if (m.type === 'set-model') {
+        registry.setModel(m.id, m.model);
       } else if (m.type === 'attach') {
         registry.acknowledge(m.id);
         sendSnapshot(ws, m.id);
+        // Re-send a still-pending permission so focusing a waiting session shows it.
+        const pend = registry.pendingPermissionOf(m.id);
+        if (pend && ws.readyState === 1) ws.send(JSON.stringify({ type: 'permission-request', id: m.id, ...pend }));
       } else if (m.type === 'gui-attach') {
         sendSnapshot(ws, m.id);
       } else if (m.type === 'gui-detach') {

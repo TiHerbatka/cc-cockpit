@@ -124,7 +124,7 @@ function mountGui(container, handlers) {
     + '<button class="perm-remember">Allow, don\'t ask again</button>'
     + '<button class="perm-deny">Deny</button>'
     + '</div>'
-    + '<div class="perm-hint">Also visible in the terminal — you can answer there too.</div>'
+    + '<div class="perm-hint">Allow once, allow &amp; remember, or deny this tool.</div>'
     + '</div>'
     + '<div class="gui-log"></div>'
     + '<form class="gui-compose">'
@@ -412,12 +412,12 @@ function mountGui(container, handlers) {
     // Mirror a native permission prompt. The buttons map to Claude's numbered
     // options (1=Allow, 2=Allow+don't-ask, 3=Deny); onAnswer sends the keystroke.
     showPermission(req, onAnswer) {
-      permTool.innerHTML = req.tool ? `Claude wants to use <b>${esc(req.tool)}</b>` : 'Claude is requesting permission';
+      permTool.innerHTML = req.toolName ? `Claude wants to use <b>${esc(req.toolName)}</b>` : 'Claude is requesting permission';
       permInput.textContent = req.input == null ? '' : truncate(JSON.stringify(req.input, null, 2), 2000);
-      const answer = (key) => { onAnswer(key); hidePerm(); };
-      permEl.querySelector('.perm-allow').onclick = () => answer('1');
-      permEl.querySelector('.perm-remember').onclick = () => answer('2');
-      permEl.querySelector('.perm-deny').onclick = () => answer('3');
+      const answer = (decision) => { onAnswer(decision); hidePerm(); };
+      permEl.querySelector('.perm-allow').onclick = () => answer('allow');
+      permEl.querySelector('.perm-remember').onclick = () => answer('allow-always');
+      permEl.querySelector('.perm-deny').onclick = () => answer('deny');
       permEl.hidden = false;
     },
     hidePermission() { hidePerm(); },

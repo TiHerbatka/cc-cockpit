@@ -11,10 +11,11 @@ const { sdkMessageToRecords } = require('./sdk');
 const { createConversation } = require('./normalize');
 
 class SessionRegistry extends EventEmitter {
-  constructor({ spawnDriver, projectsRoot = null }) {
+  constructor({ spawnDriver, projectsRoot = null, loadResumeRecords = () => [] }) {
     super();
     this.spawnDriver = spawnDriver;
     this.projectsRoot = projectsRoot;
+    this.loadResumeRecords = loadResumeRecords; // (ccSessionId) -> transcript records[]
     this.sessions = new Map();
     this.focusedId = null;
   }
@@ -33,19 +34,26 @@ class SessionRegistry extends EventEmitter {
       topics: [],          // assistant's per-session topic tracker (from ~/.claude/topics)
       status: 'working',
       conversation: createConversation(), // the live render model + delta fold
+      pendingPermission: null, // a tool-permission request awaiting the user's answer
       autoTitle: null,     // Claude Code aiTitle (filled in for temp sessions)
       customName: null,    // user-set display name (rename) — wins over the rest
       driver,
       working: true,       // a turn is in progress (send..result)
-      waiting: false,      // a permission prompt is pending (-> needs-you; unused this phase)
+      waiting: false,      // a permission prompt is pending (-> needs-you)
       ended: false,        // a turn has ended (-> your-move when unfocused)
       acknowledged: false, // focused since waiting/ended began
       exited: false,
     };
     this.sessions.set(id, session);
+    // Resume: seed the model from the on-disk transcript so the reopened session
+    // shows its prior history (the SDK stream only carries new turns).
+    if (opts.resumeId) {
+      try { const recs = this.loadResumeRecords(ccSessionId); if (recs && recs.length) session.conversation.seed(recs); } catch { /* ignore */ }
+    }
     driver.onMessage((msg) => this._onMessage(id, msg));
     driver.onExit(() => this.markExited(id));
     if (driver.onError) driver.onError((e) => this._onError(id, e));
+    if (driver.onPermission) driver.onPermission((req) => this._onPermission(id, req));
     this.emit('sessions');
     return this._public(session);
   }
@@ -56,7 +64,10 @@ class SessionRegistry extends EventEmitter {
     const s = this.sessions.get(id);
     if (!s || s.exited || !msg || !msg.type) return;
     if (msg.type === 'system' && msg.subtype === 'init') {
-      if (msg.permissionMode) this.emit('meta', id, { mode: msg.permissionMode });
+      const meta = {};
+      if (msg.permissionMode) meta.mode = msg.permissionMode;
+      if (msg.model) meta.model = msg.model;
+      if (Object.keys(meta).length) this.emit('meta', id, meta);
       return;
     }
     if (msg.type === 'result') {
@@ -76,6 +87,16 @@ class SessionRegistry extends EventEmitter {
     this.emit('session-error', id, err && err.message ? err.message : String(err));
   }
 
+  // A gated tool is awaiting a decision: record it, flag the session needs-you,
+  // and surface the request to the GUI.
+  _onPermission(id, req) {
+    const s = this.sessions.get(id);
+    if (!s || s.exited) return;
+    s.pendingPermission = req;
+    this.signalWaiting(id);
+    this.emit('permission', id, req);
+  }
+
   // Send a user turn into the live session (structured input replaces keystrokes).
   // The SDK does not echo streamed input back as a user message, so fold the turn
   // into the conversation ourselves (optimistic echo) so it renders immediately.
@@ -86,6 +107,43 @@ class SessionRegistry extends EventEmitter {
     if (ops.length) this.emit('delta', id, ops);
     s.driver.write(text);
     this.markWorking(id);
+  }
+
+  // Resolve a pending tool-permission with the user's decision; the turn resumes.
+  answerPermission(id, toolUseId, decision) {
+    const s = this.sessions.get(id);
+    if (!s || s.exited) return;
+    if (s.driver.answerPermission) s.driver.answerPermission(toolUseId, decision);
+    s.pendingPermission = null;
+    this.markWorking(id);
+  }
+
+  // The tool-permission request awaiting an answer (re-sent to a client on attach).
+  pendingPermissionOf(id) {
+    const s = this.sessions.get(id);
+    return s ? s.pendingPermission : null;
+  }
+
+  // Stop the current turn.
+  interrupt(id) {
+    const s = this.sessions.get(id);
+    if (s && !s.exited && s.driver.interrupt) s.driver.interrupt();
+  }
+
+  // Switch the permission mode mid-session (chip updates optimistically via meta).
+  setPermissionMode(id, mode) {
+    const s = this.sessions.get(id);
+    if (!s || s.exited) return;
+    if (s.driver.setPermissionMode) s.driver.setPermissionMode(mode);
+    this.emit('meta', id, { mode });
+  }
+
+  // Switch the model mid-session (chip updates optimistically via meta).
+  setModel(id, model) {
+    const s = this.sessions.get(id);
+    if (!s || s.exited) return;
+    if (s.driver.setModel) s.driver.setModel(model);
+    this.emit('meta', id, { model });
   }
 
   // The current render model (full snapshot for attach/resume).

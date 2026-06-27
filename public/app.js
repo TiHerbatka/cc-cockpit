@@ -133,19 +133,23 @@ function updateHead() {
   headLabel.textContent = s ? s.label : '';
   headState.className = 'icon ' + (s ? s.status : '');
   headState.textContent = s ? (STATE_ICON[s.status] || '○') : '';
+  // Stop button is available only while a turn is running.
+  if (interruptBtn) interruptBtn.hidden = !(s && s.status === 'working');
   // Push the focused session's tracked topics to the GUI panel.
   gui.setTopics(s ? s.topics : []);
 }
 
-// ---- Chips: Claude permission mode + usage, re-sourced from the SDK stream ----
+// ---- Chips + controls: permission mode, usage, interrupt, model -------------
 const claudeModeEl = document.getElementById('claude-mode');
 const interruptBtn = document.getElementById('interrupt-btn');
 const usageEl = document.getElementById('usage-chip');
-if (interruptBtn) interruptBtn.hidden = true; // graceful interrupt is a deferred control
-// The mode chip comes from the init message's permission mode; usage from the
-// result message's token totals. Both arrive as {type:'meta'} over the socket.
+const modelSelect = document.getElementById('model-select');
+const MODE_CYCLE = ['default', 'acceptEdits', 'plan'];
+// Mode chip from the init message's permission mode; usage from the result
+// message's token totals; model from init/setModel. All arrive as {type:'meta'}.
 function renderMeta(meta) {
   if (meta.mode && claudeModeEl) claudeModeEl.textContent = meta.mode;
+  if (meta.model && modelSelect) { for (const o of modelSelect.options) o.selected = (meta.model === o.value || meta.model.startsWith(o.value)); }
   if (meta.usage && usageEl) {
     const u = meta.usage;
     const inTok = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
@@ -153,6 +157,18 @@ function renderMeta(meta) {
     usageEl.textContent = `tok ${k(inTok)}↓ ${k(u.output_tokens || 0)}↑`;
   }
 }
+// Interrupt the running turn.
+if (interruptBtn) interruptBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'interrupt', id: focusedId })); };
+// Cycle the permission mode (default -> acceptEdits -> plan); the server echoes
+// the new mode back as meta, which updates the chip.
+if (claudeModeEl) claudeModeEl.onclick = () => {
+  if (!focusedId) return;
+  const cur = claudeModeEl.textContent.trim();
+  const next = MODE_CYCLE[(MODE_CYCLE.indexOf(cur) + 1) % MODE_CYCLE.length];
+  ws.send(JSON.stringify({ type: 'set-permission-mode', id: focusedId, mode: next }));
+};
+// Switch the model.
+if (modelSelect) modelSelect.onchange = () => { if (focusedId) ws.send(JSON.stringify({ type: 'set-model', id: focusedId, model: modelSelect.value })); };
 // Doc buttons: open the focused session's local-docs.md / TODO.md via the OS default app.
 const openDocsBtn = document.getElementById('open-docs');
 const openTodoBtn = document.getElementById('open-todo');
@@ -220,6 +236,7 @@ function focus(id) {
   focusedId = id;
   errorEl.textContent = '';
   guiModel = null; // reset until the new session's snapshot arrives
+  gui.hidePermission(); // clear any stale panel from the previous session
   // attach acknowledges the session (clearing a your-move signal) and triggers a
   // gui-snapshot of its current model.
   ws.send(JSON.stringify({ type: 'attach', id }));
@@ -245,6 +262,8 @@ ws.addEventListener('message', (ev) => {
     window.renderGuiModel(previewBody, previewModel);
   } else if (m.type === 'meta' && m.id === focusedId) {
     renderMeta(m);
+  } else if (m.type === 'permission-request' && m.id === focusedId) {
+    gui.showPermission(m, (decision) => ws.send(JSON.stringify({ type: 'permission-answer', id: m.id, toolUseId: m.toolUseId, decision })));
   } else if (m.type === 'error') {
     errorEl.textContent = m.message;
     errorCenter.add('Server: ' + m.message);

@@ -30,6 +30,7 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 #head-state { flex: 0 0 14px; }
 .mode-chip { cursor: pointer; flex: 0 0 auto; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #2d2d30; border: 1px solid #3c3c3c; color: #c5c5c5; white-space: nowrap; }
 .mode-chip:hover { background: #34343a; border-color: #4a4a50; }
+.model-select { flex: 0 0 auto; font-size: 11px; padding: 2px 4px; border-radius: 6px; background: #2d2d30; border: 1px solid #3c3c3c; color: #c5c5c5; cursor: pointer; }
 #interrupt-btn { flex: 0 0 auto; background: #5a2d2d; color: #fff; border: none; border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
 #interrupt-btn:hover { background: #7a3a3a; }
 #interrupt-btn[hidden] { display: none; }

@@ -58,13 +58,46 @@ test('write delivers a wrapped streaming user message to the query input', async
   d.kill();
 });
 
-test('canUseTool allows normal tools and declines AskUserQuestion / ExitPlanMode', async () => {
+test('canUseTool parks a gated tool, surfaces it via onPermission, resolves on allow', async () => {
   let canUse;
-  const fakeQuery = (args) => { canUse = args.options.canUseTool; return (async function* () {})(); };
-  createSdkDriver('C:/x', 'id', {}, { query: fakeQuery });
-  assert.deepStrictEqual(await canUse('Write', { file_path: 'a' }), { behavior: 'allow', updatedInput: { file_path: 'a' } });
-  assert.strictEqual((await canUse('AskUserQuestion', { questions: [] })).behavior, 'deny');
-  assert.strictEqual((await canUse('ExitPlanMode', {})).behavior, 'deny');
+  const d = createSdkDriver('C:/x', 'id', {}, { query: (a) => { canUse = a.options.canUseTool; return (async function* () {})(); } });
+  const reqs = [];
+  d.onPermission((r) => reqs.push(r));
+  const p = canUse('Write', { file_path: 'a' }, { toolUseID: 't1', suggestions: [{ type: 'addRule' }] });
+  assert.deepStrictEqual(reqs, [{ toolName: 'Write', input: { file_path: 'a' }, toolUseId: 't1', suggestions: [{ type: 'addRule' }] }]);
+  d.answerPermission('t1', 'allow');
+  assert.deepStrictEqual(await p, { behavior: 'allow', updatedInput: { file_path: 'a' } });
+});
+
+test('answerPermission maps deny and allow-always to the right PermissionResult', async () => {
+  let canUse;
+  const d = createSdkDriver('C:/x', 'id', {}, { query: (a) => { canUse = a.options.canUseTool; return (async function* () {})(); } });
+  d.onPermission(() => {});
+  const pDeny = canUse('Bash', { command: 'x' }, { toolUseID: 'd1' });
+  d.answerPermission('d1', 'deny');
+  assert.deepStrictEqual(await pDeny, { behavior: 'deny', message: 'Denied by the user.' });
+  const pAlways = canUse('Bash', { command: 'y' }, { toolUseID: 'a1', suggestions: [{ type: 'addRule', x: 1 }] });
+  d.answerPermission('a1', 'allow-always');
+  assert.deepStrictEqual(await pAlways, { behavior: 'allow', updatedInput: { command: 'y' }, updatedPermissions: [{ type: 'addRule', x: 1 }] });
+});
+
+test('canUseTool declines AskUserQuestion / ExitPlanMode without parking', async () => {
+  let canUse;
+  createSdkDriver('C:/x', 'id', {}, { query: (a) => { canUse = a.options.canUseTool; return (async function* () {})(); } });
+  assert.strictEqual((await canUse('AskUserQuestion', { questions: [] }, {})).behavior, 'deny');
+  assert.strictEqual((await canUse('ExitPlanMode', {}, {})).behavior, 'deny');
+});
+
+test('setPermissionMode / setModel / interrupt call through to the query object', () => {
+  const calls = [];
+  const fakeQ = Object.assign((async function* () {})(), {
+    setPermissionMode: (m) => calls.push(['mode', m]),
+    setModel: (m) => calls.push(['model', m]),
+    interrupt: () => calls.push(['interrupt']),
+  });
+  const d = createSdkDriver('C:/x', 'id', {}, { query: () => fakeQ });
+  d.setPermissionMode('plan'); d.setModel('claude-sonnet-4-6'); d.interrupt();
+  assert.deepStrictEqual(calls, [['mode', 'plan'], ['model', 'claude-sonnet-4-6'], ['interrupt']]);
 });
 
 test('createSdkDriver builds subscription-only options (scrubbed env, settingSources, resume)', () => {
