@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { normalize } = require('../server/normalize');
+const { normalize, createConversation } = require('../server/normalize');
 
 const userMsg = (text) => ({ type: 'user', message: { role: 'user', content: text } });
 const asst = (content) => ({ type: 'assistant', message: { role: 'assistant', content } });
@@ -98,4 +98,59 @@ test('TaskUpdate deleted removes the task; an empty Task list is [] not null', (
 test('unknown record types are ignored', () => {
   const m = normalize([{ type: 'file-history-snapshot' }, { type: 'mode', mode: 'normal' }, userMsg('ok')]);
   assert.deepStrictEqual(m.items, [{ kind: 'user', text: 'ok' }]);
+});
+
+// ---- Incremental conversation fold (createConversation) ----
+
+test('applyRecord appends a user item and returns just an append op', () => {
+  const c = createConversation();
+  const ops = c.applyRecord(userMsg('Hello'));
+  assert.deepStrictEqual(c.model.items, [{ kind: 'user', text: 'Hello' }]);
+  assert.deepStrictEqual(ops, [{ op: 'append', item: { kind: 'user', text: 'Hello' } }]);
+});
+
+test('a system-reminder-prefixed prompt yields no ops', () => {
+  const c = createConversation();
+  const ops = c.applyRecord(userMsg('<system-reminder>noise</system-reminder>'));
+  assert.deepStrictEqual(ops, []);
+  assert.deepStrictEqual(c.model.items, []);
+});
+
+test('applyRecord on ai-title returns a title op and sets the model title', () => {
+  const c = createConversation();
+  const ops = c.applyRecord({ type: 'ai-title', aiTitle: 'My Title' });
+  assert.deepStrictEqual(ops, [{ op: 'title', title: 'My Title' }]);
+  assert.strictEqual(c.model.title, 'My Title');
+});
+
+test('a tool_use then its tool_result updates the same item in place by id', () => {
+  const c = createConversation();
+  c.applyRecord(asst([toolUse('t1', 'Read', { file_path: 'a' })]));
+  assert.strictEqual(c.model.items[0].status, 'pending');
+  assert.deepStrictEqual(c.model.status.currentTool, { name: 'Read', input: { file_path: 'a' } });
+  const ops = c.applyRecord(toolResultMsg('t1', 'FILE'));
+  const tool = c.model.items.find((i) => i.kind === 'tool');
+  assert.strictEqual(tool.status, 'ok');
+  assert.strictEqual(tool.resultText, 'FILE');
+  assert.ok(ops.some((o) => o.op === 'update' && o.id === 't1' && o.patch.status === 'ok' && o.patch.resultText === 'FILE'));
+  // resolving the pending tool clears currentTool -> a status op rides along
+  assert.ok(ops.some((o) => o.op === 'status' && o.status.currentTool === null));
+});
+
+test('appending a tool_use emits a status op reflecting the new currentTool', () => {
+  const c = createConversation();
+  const ops = c.applyRecord(asst([toolUse('t2', 'Bash', { command: 'ls' })]));
+  assert.ok(ops.some((o) => o.op === 'append' && o.item.kind === 'tool'));
+  assert.ok(ops.some((o) => o.op === 'status' && o.status.currentTool && o.status.currentTool.name === 'Bash'));
+});
+
+test('seed folds a batch and matches the legacy normalize output', () => {
+  const records = [
+    userMsg('hi'),
+    asst([{ type: 'thinking', thinking: 'hmm' }, { type: 'text', text: 'hello' }]),
+    asst([toolUse('t1', 'Bash', { command: 'ls' })]),
+    toolResultMsg('t1', 'out'),
+    { type: 'ai-title', aiTitle: 'T' },
+  ];
+  assert.deepStrictEqual(createConversation().seed(records), normalize(records));
 });
