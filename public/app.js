@@ -356,19 +356,21 @@ function openNewSessionPicker() {
       return out;
     };
 
-    const renderCockpit = () => {
-      const q = search.value.trim().toLowerCase();
-      const matches = projects.filter((p) =>
-        !q || p.name.toLowerCase().includes(q) || (p.path || '').toLowerCase().includes(q));
+    // One renderer for both scopes: 3 time-band columns for the recent view
+    // (Last 24h / 1–3d / 3–7d, like the Resume modal); a flat, age-filtered list
+    // for the older view. `emptyMsg` shows when the underlying list is empty.
+    const renderList = (items, emptyMsg) => {
       cols.innerHTML = '';
       cols.classList.toggle('flat', showOlder);
-      if (!projects.length) { cols.textContent = 'No projects yet — create one below.'; return; }
-      if (!matches.length) { cols.innerHTML = '<div class="resume-empty">No matches</div>'; return; }
+      if (!items.length) { cols.textContent = emptyMsg; return; }
+      const q = search.value.trim().toLowerCase();
+      const matched = items.filter((p) => !q || p.name.toLowerCase().includes(q) || (p.path || '').toLowerCase().includes(q));
+      if (!matched.length) { cols.innerHTML = '<div class="resume-empty">No matches</div>'; return; }
       const now = Date.now();
       if (!showOlder) {
-        // 3 columns: the recent bands (projects last used within 7 days).
+        // 3 columns: the recent bands (last used within 7 days).
         const buckets = bands3.map(() => []);
-        for (const p of matches) {
+        for (const p of matched) {
           if (!p.lastActivity) continue;
           const age = now - Date.parse(p.lastActivity);
           const bi = bands3.findIndex((b) => age < b.max);
@@ -382,8 +384,8 @@ function openNewSessionPicker() {
           col.append(h, list); cols.appendChild(col);
         });
       } else {
-        // Single flat list: older than 7 days + never-used, recent first, never last.
-        const older = matches.filter((p) => !p.lastActivity || (now - Date.parse(p.lastActivity)) >= WEEK_MS);
+        // Single flat list: older than 7 days (+ never-used), recent first.
+        const older = matched.filter((p) => !p.lastActivity || (now - Date.parse(p.lastActivity)) >= WEEK_MS);
         older.sort((a, b) => (Date.parse(b.lastActivity || 0) || -Infinity) - (Date.parse(a.lastActivity || 0) || -Infinity));
         const col = document.createElement('div'); col.className = 'resume-col';
         const h = document.createElement('div'); h.className = 'resume-col-head'; h.textContent = `Older than 7 days (${older.length})`;
@@ -394,25 +396,12 @@ function openNewSessionPicker() {
       }
     };
 
-    // Discovered folders: a flat, recent-first list of folders outside the cockpit
-    // root. Clicking starts a FRESH session in that existing folder (create(cwd)).
-    const renderDiscovered = () => {
+    const render = () => {
+      if (scope === 'cockpit') { renderList(projects, 'No projects yet — create one below.'); return; }
       const data = showOlder ? discAll : discWeek;
-      cols.classList.add('flat');
-      cols.innerHTML = '';
       if (!data) { cols.textContent = 'Loading…'; return; }
-      const q = search.value.trim().toLowerCase();
-      const matches = data.filter((f) => !q || f.name.toLowerCase().includes(q) || (f.path || '').toLowerCase().includes(q));
-      const col = document.createElement('div'); col.className = 'resume-col';
-      const h = document.createElement('div'); h.className = 'resume-col-head';
-      h.textContent = (showOlder ? 'Older than 7 days' : 'Discovered folders') + ` (${matches.length})`;
-      const list = document.createElement('div'); list.className = 'resume-col-list';
-      if (!matches.length) list.innerHTML = '<div class="resume-empty">No discovered folders outside the cockpit.</div>';
-      for (const f of matches) list.appendChild(projectRow(f, startIn));
-      col.append(h, list); cols.appendChild(col);
+      renderList(data, 'No discovered folders outside the cockpit.');
     };
-
-    const render = () => { if (scope === 'cockpit') renderCockpit(); else renderDiscovered(); };
 
     // Lazy-load discovered folders for the active window when first needed.
     const ensureDiscovered = async () => {
