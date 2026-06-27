@@ -1,14 +1,19 @@
 // server/sessions.js
+// The session registry, SDK-native: each session owns one streaming driver
+// (server/sdk.js) whose message stream is folded into a render model and
+// broadcast as deltas. Session state is derived from the stream's turn
+// boundaries (a sent turn -> working; a result message -> idle/your-move).
 const { EventEmitter } = require('node:events');
 const crypto = require('node:crypto');
 const path = require('node:path');
-const { RingBuffer } = require('./buffer');
 const projects = require('./projects');
+const { sdkMessageToRecords } = require('./sdk');
+const { createConversation } = require('./normalize');
 
 class SessionRegistry extends EventEmitter {
-  constructor({ spawnPty, projectsRoot = null }) {
+  constructor({ spawnDriver, projectsRoot = null }) {
     super();
-    this.spawnPty = spawnPty;
+    this.spawnDriver = spawnDriver;
     this.projectsRoot = projectsRoot;
     this.sessions = new Map();
     this.focusedId = null;
@@ -17,58 +22,75 @@ class SessionRegistry extends EventEmitter {
   create(cwd, opts = {}) {
     const id = crypto.randomUUID();
     const label = path.basename(cwd) || cwd;
-    // The Claude Code session id (used as --session-id and the transcript filename).
-    // Fresh sessions reuse the cockpit id; a resume carries its own id. This also
-    // makes it equal to CC_COCKPIT_SESSION, so hooks correlate without a lookup.
+    // The Claude Code session id (used as the SDK resume id and the transcript
+    // filename). Fresh sessions reuse the cockpit id; a resume carries its own.
     const ccSessionId = opts.resumeId || id;
-    const pty = this.spawnPty(cwd, id, { ...opts, ccSessionId });
+    const driver = this.spawnDriver(cwd, id, { ...opts, ccSessionId });
     const session = {
       id, cwd, label,
       ccSessionId,
-      mode: 'gui',         // 'gui' (rich pane, default) | 'terminal' (raw PTY fallback)
+      mode: 'gui',         // always GUI this phase (terminal returns as an option later)
       topics: [],          // assistant's per-session topic tracker (from ~/.claude/topics)
       status: 'working',
-      buffer: new RingBuffer(),
-      cols: 120,           // PTY grid size (spawn default; updated by resize).
-      rows: 30,            // A preview must match this to replay the stream faithfully.
-      autoTitle: null,     // Claude Code aiTitle (filled in for temp sessions).
-      customName: null,    // user-set display name (rename) — wins over the rest.
-      pty,
-      working: true,       // a turn is in progress (UserPromptSubmit..Stop)
-      waiting: false,      // a permission prompt is pending (-> needs-you)
+      conversation: createConversation(), // the live render model + delta fold
+      autoTitle: null,     // Claude Code aiTitle (filled in for temp sessions)
+      customName: null,    // user-set display name (rename) — wins over the rest
+      driver,
+      working: true,       // a turn is in progress (send..result)
+      waiting: false,      // a permission prompt is pending (-> needs-you; unused this phase)
       ended: false,        // a turn has ended (-> your-move when unfocused)
       acknowledged: false, // focused since waiting/ended began
       exited: false,
     };
     this.sessions.set(id, session);
-    pty.onData((data) => this.appendOutput(id, data));
-    pty.onExit(() => this.markExited(id));
+    driver.onMessage((msg) => this._onMessage(id, msg));
+    driver.onExit(() => this.markExited(id));
+    if (driver.onError) driver.onError((e) => this._onError(id, e));
     this.emit('sessions');
     return this._public(session);
   }
 
-  // Output is a buffer signal only — never a state signal (that caused the flicker).
-  appendOutput(id, data) {
+  // Fold one SDK stream message: init -> mode chip; result -> usage chip + turn
+  // end; assistant/user -> conversation deltas.
+  _onMessage(id, msg) {
+    const s = this.sessions.get(id);
+    if (!s || s.exited || !msg || !msg.type) return;
+    if (msg.type === 'system' && msg.subtype === 'init') {
+      if (msg.permissionMode) this.emit('meta', id, { mode: msg.permissionMode });
+      return;
+    }
+    if (msg.type === 'result') {
+      if (msg.usage) this.emit('meta', id, { usage: msg.usage });
+      this.markIdle(id);
+      return;
+    }
+    for (const r of sdkMessageToRecords(msg)) {
+      const ops = s.conversation.applyRecord(r);
+      if (ops.length) this.emit('delta', id, ops);
+    }
+  }
+
+  _onError(id, err) {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    this.emit('session-error', id, err && err.message ? err.message : String(err));
+  }
+
+  // Send a user turn into the live session (structured input replaces keystrokes).
+  send(id, text) {
     const s = this.sessions.get(id);
     if (!s || s.exited) return;
-    s.buffer.push(data);
-    this.emit('output', id, data);
+    s.driver.write(text);
+    this.markWorking(id);
   }
 
-  write(id, data) {
+  // The current render model (full snapshot for attach/resume).
+  modelOf(id) {
     const s = this.sessions.get(id);
-    if (s && !s.exited) s.pty.write(data);
+    return s ? s.conversation.model : null;
   }
 
-  resize(id, cols, rows) {
-    const s = this.sessions.get(id);
-    if (!s || s.exited) return;
-    s.cols = cols;
-    s.rows = rows;
-    s.pty.resize(cols, rows);
-  }
-
-  // UserPromptSubmit: a turn started.
+  // A turn started.
   markWorking(id) {
     const s = this.sessions.get(id);
     if (!s || s.exited) return;
@@ -79,7 +101,7 @@ class SessionRegistry extends EventEmitter {
     this._recompute(s);
   }
 
-  // Stop / Notification:idle_prompt: the turn ended. Unfocused -> your-move.
+  // The turn ended (result message). Unfocused -> your-move.
   markIdle(id) {
     const s = this.sessions.get(id);
     if (!s || s.exited) return;
@@ -90,33 +112,25 @@ class SessionRegistry extends EventEmitter {
     this._recompute(s);
   }
 
-  // Notification:permission_prompt: blocked awaiting a tool-permission decision.
+  // Blocked awaiting a tool-permission decision (-> needs-you). Unused this phase
+  // (posture A auto-approves); kept for the controls phase.
   signalWaiting(id) {
     const s = this.sessions.get(id);
     if (!s || s.exited) return;
     s.working = false;
     s.waiting = true;
     s.ended = false;
-    s.acknowledged = (id === this.focusedId); // focused = already seen
+    s.acknowledged = (id === this.focusedId);
     this._recompute(s);
   }
 
   // The assistant's tracked topics for this session (from ~/.claude/topics).
-  // Emits only on change so the poll that feeds it doesn't spam broadcasts.
   setTopics(id, topics) {
     const s = this.sessions.get(id);
     if (!s) return;
     const next = Array.isArray(topics) ? topics : [];
     if (JSON.stringify(next) === JSON.stringify(s.topics)) return;
     s.topics = next;
-    this.emit('sessions');
-  }
-
-  // GUI vs terminal display mode for one session ('gui' default | 'terminal').
-  setMode(id, mode) {
-    const s = this.sessions.get(id);
-    if (!s || (mode !== 'gui' && mode !== 'terminal') || s.mode === mode) return;
-    s.mode = mode;
     this.emit('sessions');
   }
 
@@ -162,7 +176,7 @@ class SessionRegistry extends EventEmitter {
   remove(id) {
     const s = this.sessions.get(id);
     if (!s) return;
-    if (!s.exited) { try { s.pty.kill(); } catch { /* already gone */ } }
+    if (!s.exited) { try { s.driver.kill(); } catch { /* already gone */ } }
     this.sessions.delete(id);
     if (this.focusedId === id) this.focusedId = null;
     this.emit('sessions');
@@ -171,17 +185,6 @@ class SessionRegistry extends EventEmitter {
   get(id) {
     const s = this.sessions.get(id);
     return s ? this._public(s) : null;
-  }
-
-  bufferOf(id) {
-    const s = this.sessions.get(id);
-    return s ? s.buffer.getAll() : '';
-  }
-
-  // The PTY grid size, so a preview can size its terminal to match the stream.
-  sizeOf(id) {
-    const s = this.sessions.get(id);
-    return s ? { cols: s.cols, rows: s.rows } : { cols: 120, rows: 30 };
   }
 
   list() {

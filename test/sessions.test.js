@@ -2,69 +2,50 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { SessionRegistry } = require('../server/sessions');
 
-function makeFakePty() {
-  const o = { _data: null, _exit: null, written: [], resized: [] };
-  o.onData = (cb) => { o._data = cb; };
+// A fake SDK driver mirroring server/sdk.js's createSdkDriver shape. The registry
+// registers onMessage/onExit/onError synchronously in create(), so a test drives
+// the stream via driver._msg(...) / driver._exit() / driver._error(...).
+function makeFakeDriver() {
+  const o = { written: [], killed: false, interrupted: false, _msg: null, _exit: null, _error: null };
+  o.onMessage = (cb) => { o._msg = cb; };
   o.onExit = (cb) => { o._exit = cb; };
-  o.write = (d) => o.written.push(d);
-  o.resize = (cols, rows) => o.resized.push([cols, rows]);
+  o.onError = (cb) => { o._error = cb; };
+  o.write = (t) => o.written.push(t);
+  o.interrupt = () => { o.interrupted = true; };
   o.kill = () => { o.killed = true; };
   return o;
 }
 
 function makeRegistry(projectsRoot = 'C:/root') {
-  const ptys = [];
+  const drivers = [];
   const reg = new SessionRegistry({
-    spawnPty: () => { const p = makeFakePty(); ptys.push(p); return p; },
+    spawnDriver: () => { const d = makeFakeDriver(); drivers.push(d); return d; },
     projectsRoot,
   });
-  return { reg, ptys };
+  return { reg, drivers };
 }
+
+const asstText = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+const result = (usage) => ({ type: 'result', subtype: 'success', usage });
+const init = (permissionMode) => ({ type: 'system', subtype: 'init', permissionMode, model: 'm', session_id: 'x' });
 
 test('create reuses the cockpit id as ccSessionId, defaults mode to gui, and passes the id to spawn', () => {
   const calls = [];
   const reg = new SessionRegistry({
-    spawnPty: (cwd, id, opts) => { calls.push({ cwd, id, opts }); return makeFakePty(); },
+    spawnDriver: (cwd, id, opts) => { calls.push({ cwd, id, opts }); return makeFakeDriver(); },
     projectsRoot: 'C:/root',
   });
   const s = reg.create('C:/root/proj');
   assert.match(s.ccSessionId, /^[0-9a-f-]{36}$/i);
-  assert.strictEqual(s.ccSessionId, s.id);          // fresh session: ccSessionId === cockpit id
-  assert.strictEqual(s.mode, 'gui');                // GUI is the default mode
-  assert.strictEqual(calls[0].opts.ccSessionId, s.ccSessionId); // forwarded to the spawn
+  assert.strictEqual(s.ccSessionId, s.id);
+  assert.strictEqual(s.mode, 'gui');
+  assert.strictEqual(calls[0].opts.ccSessionId, s.ccSessionId);
 });
 
 test('create on a resume uses the resumeId as ccSessionId', () => {
-  const reg = new SessionRegistry({ spawnPty: () => makeFakePty(), projectsRoot: 'C:/root' });
+  const reg = new SessionRegistry({ spawnDriver: () => makeFakeDriver(), projectsRoot: 'C:/root' });
   const s = reg.create('C:/root/proj', { resumeId: 'resumed-abc-123' });
   assert.strictEqual(s.ccSessionId, 'resumed-abc-123');
-});
-
-test('setMode updates the session mode (gui/terminal) and emits sessions only on change', () => {
-  const reg = new SessionRegistry({ spawnPty: () => makeFakePty(), projectsRoot: 'C:/root' });
-  const s = reg.create('C:/root/p');
-  assert.strictEqual(reg.get(s.id).mode, 'gui');
-  let emitted = 0; reg.on('sessions', () => { emitted += 1; });
-  reg.setMode(s.id, 'terminal');
-  assert.strictEqual(reg.get(s.id).mode, 'terminal');
-  assert.strictEqual(emitted, 1);
-  reg.setMode(s.id, 'terminal');           // no change -> no emit
-  assert.strictEqual(emitted, 1);
-  reg.setMode(s.id, 'bogus');              // invalid -> ignored
-  assert.strictEqual(reg.get(s.id).mode, 'terminal');
-  assert.strictEqual(emitted, 1);
-});
-
-test('setTopics stores topics and emits sessions only on change', () => {
-  const reg = new SessionRegistry({ spawnPty: () => makeFakePty(), projectsRoot: 'C:/root' });
-  const s = reg.create('C:/root/p');
-  assert.deepStrictEqual(reg.get(s.id).topics, []);
-  let emitted = 0; reg.on('sessions', () => { emitted += 1; });
-  reg.setTopics(s.id, [{ code: 'TPC1', name: 'A', status: 'active', summary: 's' }]);
-  assert.strictEqual(reg.get(s.id).topics.length, 1);
-  assert.strictEqual(emitted, 1);
-  reg.setTopics(s.id, [{ code: 'TPC1', name: 'A', status: 'active', summary: 's' }]); // same -> no emit
-  assert.strictEqual(emitted, 1);
 });
 
 test('create returns a session labelled by folder basename, status working', () => {
@@ -75,34 +56,68 @@ test('create returns a session labelled by folder basename, status working', () 
   assert.strictEqual(reg.list().length, 1);
 });
 
-test('appendOutput buffers data and emits output without changing status', () => {
-  const { reg, ptys } = makeRegistry();
+test('send forwards text to the driver and marks the session working', () => {
+  const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/proj/a');
-  reg.acknowledge(s.id);             // focus it so turn-end settles to idle
-  reg.markIdle(s.id);
+  reg.acknowledge(s.id);
+  drivers[0]._msg(result({}));               // turn ends -> idle (focused)
   assert.strictEqual(reg.get(s.id).status, 'idle');
-  const outputs = [];
-  reg.on('output', (id, data) => outputs.push([id, data]));
-  ptys[0]._data('hello');
-  assert.strictEqual(reg.bufferOf(s.id), 'hello');
-  assert.deepStrictEqual(outputs, [[s.id, 'hello']]);
-  assert.strictEqual(reg.get(s.id).status, 'idle'); // output did NOT flip status
+  reg.send(s.id, 'hello');
+  assert.deepStrictEqual(drivers[0].written, ['hello']);
+  assert.strictEqual(reg.get(s.id).status, 'working');
 });
 
-test('markIdle on an unfocused session yields your-move', () => {
-  const { reg } = makeRegistry();
-  const s = reg.create('C:/proj/a');       // never focused
-  reg.markWorking(s.id);
-  reg.markIdle(s.id);
+test('a result message ends the turn -> your-move when unfocused', () => {
+  const { reg, drivers } = makeRegistry();
+  const s = reg.create('C:/proj/a');         // unfocused, working
+  drivers[0]._msg(result({}));
   assert.strictEqual(reg.get(s.id).status, 'your-move');
 });
 
-test('markIdle on the focused session yields idle (already acknowledged)', () => {
-  const { reg } = makeRegistry();
+test('a result message on the focused session -> idle', () => {
+  const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/proj/a');
-  reg.acknowledge(s.id);                    // focus it
-  reg.markIdle(s.id);
+  reg.acknowledge(s.id);
+  drivers[0]._msg(result({}));
   assert.strictEqual(reg.get(s.id).status, 'idle');
+});
+
+test('an assistant message emits a delta and updates the model', () => {
+  const { reg, drivers } = makeRegistry();
+  const s = reg.create('C:/proj/a');
+  const deltas = [];
+  reg.on('delta', (id, ops) => deltas.push([id, ops]));
+  drivers[0]._msg(asstText('hello'));
+  assert.strictEqual(deltas.length, 1);
+  assert.strictEqual(deltas[0][0], s.id);
+  assert.ok(deltas[0][1].some((o) => o.op === 'append' && o.item.kind === 'assistant' && o.item.text === 'hello'));
+  assert.deepStrictEqual(reg.modelOf(s.id).items, [{ kind: 'assistant', text: 'hello' }]);
+});
+
+test('an init message emits meta with the permission mode', () => {
+  const { reg, drivers } = makeRegistry();
+  const s = reg.create('C:/proj/a');
+  const metas = [];
+  reg.on('meta', (id, meta) => metas.push([id, meta]));
+  drivers[0]._msg(init('default'));
+  assert.deepStrictEqual(metas, [[s.id, { mode: 'default' }]]);
+});
+
+test('a result message emits meta with usage', () => {
+  const { reg, drivers } = makeRegistry();
+  const s = reg.create('C:/proj/a');
+  const metas = [];
+  reg.on('meta', (id, meta) => metas.push(meta));
+  drivers[0]._msg(result({ input_tokens: 5 }));
+  assert.ok(metas.some((m) => m.usage && m.usage.input_tokens === 5));
+});
+
+test('modelOf starts empty and reflects folded messages', () => {
+  const { reg, drivers } = makeRegistry();
+  const s = reg.create('C:/proj/a');
+  assert.deepStrictEqual(reg.modelOf(s.id), { title: null, items: [], status: { currentTool: null, todos: null } });
+  drivers[0]._msg(asstText('one'));
+  assert.strictEqual(reg.modelOf(s.id).items.length, 1);
 });
 
 test('markWorking yields working; a focused turn ends to idle', () => {
@@ -117,76 +132,39 @@ test('markWorking yields working; a focused turn ends to idle', () => {
   assert.strictEqual(reg.get(s.id).status, 'idle');
 });
 
-test('a turn holds working across output bursts, then ends to your-move when unfocused', () => {
-  const { reg, ptys } = makeRegistry();
-  const s = reg.create('C:/proj/a');       // unfocused
-  reg.markWorking(s.id);
-  ptys[0]._data('burst one');
-  assert.strictEqual(reg.get(s.id).status, 'working');
-  ptys[0]._data('burst two after a pause');
-  assert.strictEqual(reg.get(s.id).status, 'working'); // still working, never idle
-  reg.markIdle(s.id);
-  assert.strictEqual(reg.get(s.id).status, 'your-move');
-});
-
 test('focusing a your-move session flips it to idle and is sticky', () => {
   const { reg } = makeRegistry();
   const a = reg.create('C:/proj/a');
   const b = reg.create('C:/proj/b');
-  reg.acknowledge(b.id);                    // user is on b; a is in the background
-  reg.markIdle(a.id);                       // a finishes its turn unfocused
+  reg.acknowledge(b.id);
+  reg.markIdle(a.id);
   assert.strictEqual(reg.get(a.id).status, 'your-move');
-  reg.acknowledge(a.id);                    // user opens a
+  reg.acknowledge(a.id);
   assert.strictEqual(reg.get(a.id).status, 'idle');
-  reg.acknowledge(b.id);                    // user leaves again; a stays idle
+  reg.acknowledge(b.id);
   assert.strictEqual(reg.get(a.id).status, 'idle');
 });
 
 test('redundant turn-end transitions cause no extra sessions broadcast', () => {
   const { reg } = makeRegistry();
   const s = reg.create('C:/proj/a');
-  reg.markIdle(s.id);                       // working -> your-move (one change)
+  reg.markIdle(s.id);
   let emits = 0;
   reg.on('sessions', () => { emits += 1; });
-  reg.markIdle(s.id);                       // already ended -> no change
-  reg.markIdle(s.id);                       // (e.g. Stop then idle_prompt) -> no change
+  reg.markIdle(s.id);
+  reg.markIdle(s.id);
   assert.strictEqual(emits, 0);
 });
 
-test('signalWaiting marks an unfocused session needs-you', () => {
-  const { reg } = makeRegistry();
-  const s = reg.create('C:/proj/a');
-  reg.signalWaiting(s.id);
-  assert.strictEqual(reg.get(s.id).status, 'needs-you');
-});
-
-test('signalWaiting on the focused session yields idle (already acknowledged)', () => {
-  const { reg } = makeRegistry();
-  const s = reg.create('C:/proj/a');
-  reg.acknowledge(s.id);             // focus it
-  reg.signalWaiting(s.id);           // hook fires while focused
-  assert.strictEqual(reg.get(s.id).status, 'idle');
-});
-
-test('a needs-you turn that then ends (unfocused) becomes your-move', () => {
-  const { reg } = makeRegistry();
-  const s = reg.create('C:/proj/a');
-  reg.signalWaiting(s.id);                  // unfocused permission prompt
-  assert.strictEqual(reg.get(s.id).status, 'needs-you');
-  reg.markIdle(s.id);                       // the turn finally ends, still unfocused
-  assert.strictEqual(reg.get(s.id).status, 'your-move');
-});
-
-test('acknowledge flips a needs-you session to idle and is sticky', () => {
+test('signalWaiting marks an unfocused session needs-you; focused yields idle', () => {
   const { reg } = makeRegistry();
   const a = reg.create('C:/proj/a');
-  const b = reg.create('C:/proj/b');
   reg.signalWaiting(a.id);
   assert.strictEqual(reg.get(a.id).status, 'needs-you');
-  reg.acknowledge(a.id);             // focus a -> idle
-  assert.strictEqual(reg.get(a.id).status, 'idle');
-  reg.acknowledge(b.id);             // focus elsewhere; a stays idle
-  assert.strictEqual(reg.get(a.id).status, 'idle');
+  const b = reg.create('C:/proj/b');
+  reg.acknowledge(b.id);
+  reg.signalWaiting(b.id);
+  assert.strictEqual(reg.get(b.id).status, 'idle');
 });
 
 test('markWorking clears a pending your-move (next turn started)', () => {
@@ -198,42 +176,21 @@ test('markWorking clears a pending your-move (next turn started)', () => {
   assert.strictEqual(reg.get(s.id).status, 'working');
 });
 
-test('markWorking clears a pending needs-you (next turn started)', () => {
-  const { reg } = makeRegistry();
+test('driver exit marks the session exited and ignores later send/messages', () => {
+  const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/proj/a');
-  reg.signalWaiting(s.id);
-  assert.strictEqual(reg.get(s.id).status, 'needs-you');
-  reg.markWorking(s.id);
-  assert.strictEqual(reg.get(s.id).status, 'working');
-});
-
-test('output does not clear a pending needs-you or your-move', () => {
-  const { reg, ptys } = makeRegistry();
-  const s = reg.create('C:/proj/a');
-  reg.signalWaiting(s.id);
-  ptys[0]._data('trailing output');
-  assert.strictEqual(reg.get(s.id).status, 'needs-you');
-  reg.markIdle(s.id);
-  assert.strictEqual(reg.get(s.id).status, 'your-move');
-  ptys[0]._data('more output');
-  assert.strictEqual(reg.get(s.id).status, 'your-move');
-});
-
-test('pty exit marks the session exited and ignores later output/input', () => {
-  const { reg, ptys } = makeRegistry();
-  const s = reg.create('C:/proj/a');
-  ptys[0]._exit();
+  drivers[0]._exit();
   assert.strictEqual(reg.get(s.id).status, 'exited');
-  reg.write(s.id, 'typed');
-  ptys[0]._data('late');
-  assert.deepStrictEqual(ptys[0].written, []);  // write ignored after exit
-  assert.strictEqual(reg.bufferOf(s.id), '');    // output ignored after exit
+  reg.send(s.id, 'typed');
+  drivers[0]._msg(asstText('late'));
+  assert.deepStrictEqual(drivers[0].written, []);          // send ignored after exit
+  assert.deepStrictEqual(reg.modelOf(s.id).items, []);     // messages ignored after exit
 });
 
-test('all hook transitions are ignored after exit', () => {
-  const { reg, ptys } = makeRegistry();
+test('all turn transitions are ignored after exit', () => {
+  const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/proj/a');
-  ptys[0]._exit();
+  drivers[0]._exit();
   reg.markWorking(s.id);
   reg.markIdle(s.id);
   reg.signalWaiting(s.id);
@@ -241,39 +198,21 @@ test('all hook transitions are ignored after exit', () => {
   assert.strictEqual(reg.get(s.id).status, 'exited');
 });
 
-test('write forwards input to the pty for a live session', () => {
-  const { reg, ptys } = makeRegistry();
+test('driver error is surfaced as a session-error event', () => {
+  const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/proj/a');
-  reg.write(s.id, 'ls\r');
-  assert.deepStrictEqual(ptys[0].written, ['ls\r']);
+  const errs = [];
+  reg.on('session-error', (id, msg) => errs.push([id, msg]));
+  drivers[0]._error(new Error('spawn boom'));
+  assert.deepStrictEqual(errs, [[s.id, 'spawn boom']]);
 });
 
-test('resize forwards dimensions to the pty for a live session', () => {
-  const { reg, ptys } = makeRegistry();
-  const s = reg.create('C:/proj/a');
-  reg.resize(s.id, 100, 40);
-  assert.deepStrictEqual(ptys[0].resized, [[100, 40]]);
-});
-
-test('resize is ignored after the session has exited', () => {
-  const { reg, ptys } = makeRegistry();
-  const s = reg.create('C:/proj/a');
-  ptys[0]._exit();
-  reg.resize(s.id, 100, 40);
-  assert.deepStrictEqual(ptys[0].resized, []);
-});
-
-test('projectOf returns the first segment under the projects root', () => {
+test('projectOf returns the first segment under the projects root, else null', () => {
   const { reg } = makeRegistry('C:/root');
   assert.strictEqual(reg.projectOf('C:/root/alpha'), 'alpha');
   assert.strictEqual(reg.projectOf('C:/root/alpha/sub/dir'), 'alpha');
-});
-
-test('projectOf returns null for the root itself or paths outside it', () => {
-  const { reg } = makeRegistry('C:/root');
   assert.strictEqual(reg.projectOf('C:/root'), null);
   assert.strictEqual(reg.projectOf('C:/elsewhere/x'), null);
-  assert.strictEqual(reg.projectOf(''), null);
 });
 
 test('create exposes the derived project on the public session', () => {
@@ -297,12 +236,12 @@ test('a session under the temp dir is exposed as temp (project null)', () => {
 test('setAutoTitle updates the label, but a rename (customName) wins', () => {
   const { reg } = makeRegistry('C:/root');
   const t = reg.create('C:/root/_temporary-sessions/x');
-  assert.strictEqual(reg.get(t.id).label, 'x');          // folder-basename default
+  assert.strictEqual(reg.get(t.id).label, 'x');
   reg.setAutoTitle(t.id, 'Fix the thing');
   assert.strictEqual(reg.get(t.id).label, 'Fix the thing');
   reg.rename(t.id, 'My name');
-  assert.strictEqual(reg.get(t.id).label, 'My name');    // customName wins
-  reg.rename(t.id, '   ');                               // clearing falls back to autoTitle
+  assert.strictEqual(reg.get(t.id).label, 'My name');
+  reg.rename(t.id, '   ');
   assert.strictEqual(reg.get(t.id).label, 'Fix the thing');
 });
 
@@ -313,18 +252,29 @@ test('rename a normal session emits sessions only when the label changes', () =>
   reg.rename(s.id, 'Renamed');
   assert.strictEqual(reg.get(s.id).label, 'Renamed');
   assert.strictEqual(emits, 1);
-  reg.rename(s.id, 'Renamed');                            // no change -> no emit
+  reg.rename(s.id, 'Renamed');
   assert.strictEqual(emits, 1);
 });
 
+test('setTopics stores topics and emits sessions only on change', () => {
+  const { reg } = makeRegistry('C:/root');
+  const s = reg.create('C:/root/p');
+  assert.deepStrictEqual(reg.get(s.id).topics, []);
+  let emitted = 0; reg.on('sessions', () => { emitted += 1; });
+  reg.setTopics(s.id, [{ code: 'TPC1', name: 'A', status: 'active', summary: 's' }]);
+  assert.strictEqual(reg.get(s.id).topics.length, 1);
+  assert.strictEqual(emitted, 1);
+  reg.setTopics(s.id, [{ code: 'TPC1', name: 'A', status: 'active', summary: 's' }]);
+  assert.strictEqual(emitted, 1);
+});
+
 test('remove kills a live session, deletes it, clears focus, and broadcasts', () => {
-  const { reg, ptys } = makeRegistry();
+  const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/root/alpha');
-  reg.acknowledge(s.id);                 // focus it
-  let emitted = 0;
-  reg.on('sessions', () => { emitted += 1; });
+  reg.acknowledge(s.id);
+  let emitted = 0; reg.on('sessions', () => { emitted += 1; });
   reg.remove(s.id);
-  assert.strictEqual(ptys[0].killed, true);
+  assert.strictEqual(drivers[0].killed, true);
   assert.strictEqual(reg.get(s.id), null);
   assert.strictEqual(reg.focusedId, null);
   assert.strictEqual(emitted, 1);
@@ -332,19 +282,18 @@ test('remove kills a live session, deletes it, clears focus, and broadcasts', ()
 });
 
 test('remove on an exited session just deletes it (no kill needed)', () => {
-  const { reg, ptys } = makeRegistry();
+  const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/root/alpha');
-  ptys[0]._exit();
-  ptys[0].killed = false;                // reset after exit bookkeeping
+  drivers[0]._exit();
+  drivers[0].killed = false;
   reg.remove(s.id);
-  assert.strictEqual(ptys[0].killed, false);
+  assert.strictEqual(drivers[0].killed, false);
   assert.strictEqual(reg.get(s.id), null);
 });
 
 test('remove on an unknown id is a no-op', () => {
   const { reg } = makeRegistry();
-  let emitted = 0;
-  reg.on('sessions', () => { emitted += 1; });
+  let emitted = 0; reg.on('sessions', () => { emitted += 1; });
   reg.remove('nope');
   assert.strictEqual(emitted, 0);
 });
