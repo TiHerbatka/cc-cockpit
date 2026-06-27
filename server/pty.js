@@ -96,4 +96,4 @@ function spawnClaude(cwd, opts = {}) {
   };
 }
 
-module.exports = { spawnClaude, resolveExecutable, buildSpawn };
+module.exports = { spawnClaude, resolveExecutable, buildSpawn, scrubParentClaudeEnv };
