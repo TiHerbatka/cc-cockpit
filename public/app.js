@@ -315,8 +315,12 @@ function openNewSessionPicker() {
   openModal(async (box, close) => {
     box.innerHTML =
       '<h2>New session</h2>' +
+      '<div class="scope-switch">' +
+        '<button data-scope="cockpit" class="active">Cockpit projects</button>' +
+        '<button data-scope="discovered">Discovered folders</button>' +
+      '</div>' +
       '<div class="modal-toolbar">' +
-        '<input class="modal-search" placeholder="Search projects by name or path…" />' +
+        '<input class="modal-search" placeholder="Search by name or path…" />' +
         '<button class="older-toggle">Older than 7 days ▸</button>' +
       '</div>' +
       '<div class="resume-cols">Loading…</div>' +
@@ -327,13 +331,32 @@ function openNewSessionPicker() {
     const olderToggle = box.querySelector('.older-toggle');
     const input = box.querySelector('.modal-create input');
     const createBtn = box.querySelector('.modal-create button');
+    const scopeBtns = [...box.querySelectorAll('.scope-switch button')];
     const startIn = (cwd) => { ws.send(JSON.stringify({ type: 'create', cwd })); close(); };
     box.querySelector('.temp-btn').onclick = () => { ws.send(JSON.stringify({ type: 'create-temp' })); close(); };
 
-    let projects = [];
+    let projects = [];     // cockpit projects (/api/projects)
+    let discWeek = null;   // external discovered folders, last 7 days (/api/recent)
+    let discAll = null;    // external discovered folders, all time (lazy)
+    let scope = 'cockpit';
     let showOlder = false;
     const bands3 = PROJECT_BANDS.slice(0, 3); // 24h / 1–3d / 3–7d
-    const render = () => {
+
+    // External discovered folders = recent groups tagged neither cockpit nor temp,
+    // collapsed to one row per folder (its most-recent session = last used).
+    const foldersFrom = (data) => {
+      const out = [];
+      for (const g of data.groups) {
+        if (g.temp || g.cockpit) continue;
+        let last = null;
+        for (const s of g.sessions) { const t = Date.parse(s.lastActivity); if (!Number.isNaN(t) && (last === null || t > last)) last = t; }
+        out.push({ name: baseName(g.cwd), path: g.cwd, lastActivity: last ? new Date(last).toISOString() : null });
+      }
+      out.sort((a, b) => (Date.parse(b.lastActivity || 0) || -Infinity) - (Date.parse(a.lastActivity || 0) || -Infinity));
+      return out;
+    };
+
+    const renderCockpit = () => {
       const q = search.value.trim().toLowerCase();
       const matches = projects.filter((p) =>
         !q || p.name.toLowerCase().includes(q) || (p.path || '').toLowerCase().includes(q));
@@ -370,11 +393,52 @@ function openNewSessionPicker() {
         col.append(h, list); cols.appendChild(col);
       }
     };
-    olderToggle.onclick = () => {
+
+    // Discovered folders: a flat, recent-first list of folders outside the cockpit
+    // root. Clicking starts a FRESH session in that existing folder (create(cwd)).
+    const renderDiscovered = () => {
+      const data = showOlder ? discAll : discWeek;
+      cols.classList.add('flat');
+      cols.innerHTML = '';
+      if (!data) { cols.textContent = 'Loading…'; return; }
+      const q = search.value.trim().toLowerCase();
+      const matches = data.filter((f) => !q || f.name.toLowerCase().includes(q) || (f.path || '').toLowerCase().includes(q));
+      const col = document.createElement('div'); col.className = 'resume-col';
+      const h = document.createElement('div'); h.className = 'resume-col-head';
+      h.textContent = (showOlder ? 'Older than 7 days' : 'Discovered folders') + ` (${matches.length})`;
+      const list = document.createElement('div'); list.className = 'resume-col-list';
+      if (!matches.length) list.innerHTML = '<div class="resume-empty">No discovered folders outside the cockpit.</div>';
+      for (const f of matches) list.appendChild(projectRow(f, startIn));
+      col.append(h, list); cols.appendChild(col);
+    };
+
+    const render = () => { if (scope === 'cockpit') renderCockpit(); else renderDiscovered(); };
+
+    // Lazy-load discovered folders for the active window when first needed.
+    const ensureDiscovered = async () => {
+      if (!discWeek) {
+        try { discWeek = foldersFrom(await (await fetch('/api/recent?window=week')).json()); }
+        catch { cols.textContent = 'Failed to load discovered folders.'; return; }
+      }
+      if (showOlder && !discAll) {
+        cols.textContent = 'Loading older folders…';
+        try { discAll = foldersFrom(await (await fetch('/api/recent?window=all')).json()); }
+        catch { cols.textContent = 'Failed to load older folders.'; return; }
+      }
+      render();
+    };
+
+    scopeBtns.forEach((b) => { b.onclick = async () => {
+      scope = b.dataset.scope;
+      scopeBtns.forEach((x) => x.classList.toggle('active', x === b));
+      if (scope === 'discovered') await ensureDiscovered(); else render();
+    }; });
+
+    olderToggle.onclick = async () => {
       showOlder = !showOlder;
       olderToggle.textContent = showOlder ? '◂ Recent (last 7 days)' : 'Older than 7 days ▸';
       olderToggle.classList.toggle('active', showOlder);
-      render();
+      if (scope === 'discovered') await ensureDiscovered(); else render();
     };
 
     try {
