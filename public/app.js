@@ -1,34 +1,9 @@
-// Globals from vendor scripts: Terminal (xterm), FitAddon
+// SDK-only cockpit: the GUI renders entirely from the structured session stream
+// (no terminal / xterm).
 const ws = new WebSocket(`ws://${location.host}`);
-const term = new Terminal({ cursorBlink: true, fontSize: 13, theme: { background: '#1e1e1e' } });
-const fit = new FitAddon.FitAddon();
-term.loadAddon(fit);
-term.open(document.getElementById('terminal'));
-fit.fit();
-
-// Tell the server the focused session's PTY to match the rendered terminal
-// size. Without this the PTY stays at its spawn default (120x30) while xterm
-// renders at the window size, so full-screen TUIs (like claude) paint for the
-// wrong width and ghost/overlap on redraw.
-function sendResize() {
-  if (focusedId && ws.readyState === 1) {
-    ws.send(JSON.stringify({ type: 'resize', id: focusedId, cols: term.cols, rows: term.rows }));
-  }
-}
-window.addEventListener('resize', () => {
-  fit.fit(); sendResize();
-  if (previewTerm && previewCols) { fitPreviewFont(previewCols, previewRows); previewTerm.resize(previewCols, previewRows); }
-});
 
 let sessions = [];
 let focusedId = null;
-
-// Passive-preview state: a read-only mirror of any session (see openPreview).
-let previewId = null;
-let previewTerm = null;
-let previewOverlay = null;
-let previewCols = 0;
-let previewRows = 0;
 let ctxMenuEl = null;
 
 const listEl = document.getElementById('session-list');
@@ -177,11 +152,6 @@ const openTodoBtn = document.getElementById('open-todo');
 if (openDocsBtn) openDocsBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'open-file', id: focusedId, which: 'docs' })); };
 if (openTodoBtn) openTodoBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'open-file', id: focusedId, which: 'todo' })); };
 
-// Terminal mode returns as a deliberate option later; hide its switch for now.
-// (Inline display:none beats the #mode-switch CSS rule, which would override the
-// hidden attribute.)
-const modeSwitchEl = document.getElementById('mode-switch');
-if (modeSwitchEl) modeSwitchEl.style.display = 'none';
 
 // Distinct shape per state (not just color); working spins, needs-you pulses.
 const STATE_ICON = { working: '⚙︎', 'needs-you': '▲', 'your-move': '●', idle: '○', exited: '✕' };
@@ -235,7 +205,7 @@ function render() {
 
 function removeSession(s) {
   if (s.status !== 'exited' && !confirm(`Kill session "${s.label}"? This ends the running Claude.`)) return;
-  if (focusedId === s.id) { focusedId = null; term.reset(); detachGui(); guiPaneEl.hidden = true; updateHead(); }
+  if (focusedId === s.id) { focusedId = null; detachGui(); guiPaneEl.hidden = true; updateHead(); }
   ws.send(JSON.stringify({ type: 'remove', id: s.id }));
 }
 
@@ -642,66 +612,5 @@ function openRenameModal(s) {
   });
 }
 
-// ---- Passive session preview (read-only) ------------------------------------
-// A modal that mirrors a session live WITHOUT attaching: it uses the
-// side-effect-free 'peek' message for the backlog and the existing per-session
-// 'output' broadcast for live updates, so it never focuses the session or clears
-// a needs-you/your-move signal. Watch-only (xterm disableStdin) and it never
-// resizes the session's PTY.
-// Scale the preview font so a cols x rows grid fits the modal in BOTH dimensions,
-// so the whole frame is visible with no scrollbars. Ratios slightly under-estimate
-// xterm's monospace cell (≈0.62*fs wide, ≈1.25*fs tall) to leave a hair of margin.
-function fitPreviewFont(cols, rows) {
-  if (!previewTerm || !previewOverlay) return;
-  const wrap = previewOverlay.querySelector('.preview-term');
-  if (!wrap) return;
-  const w = wrap.clientWidth - 8;
-  const h = wrap.clientHeight - 8;
-  if (w <= 0 || h <= 0) return;
-  const byWidth = w / (cols * 0.62);
-  const byHeight = h / (rows * 1.25);
-  const fs = Math.max(4, Math.min(15, Math.floor(Math.min(byWidth, byHeight))));
-  previewTerm.options.fontSize = fs;
-}
-
-function closePreview() {
-  if (previewTerm) { try { previewTerm.dispose(); } catch { /* already disposed */ } }
-  if (previewOverlay && previewOverlay.parentNode) previewOverlay.remove();
-  previewId = null; previewTerm = null; previewOverlay = null; previewCols = 0; previewRows = 0;
-}
-
-function openPreview(s) {
-  closePreview(); // one preview at a time
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  const box = document.createElement('div');
-  box.className = 'preview-box';
-  const head = document.createElement('div');
-  head.className = 'preview-head';
-  const title = document.createElement('span');
-  title.textContent = `Preview — ${s.label} (read-only)`;
-  const closeBtn = document.createElement('button');
-  closeBtn.className = 'preview-close';
-  closeBtn.textContent = '✕';
-  head.append(title, closeBtn);
-  const termWrap = document.createElement('div');
-  termWrap.className = 'preview-term';
-  box.append(head, termWrap);
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-  previewOverlay = overlay;
-
-  const pt = new Terminal({ disableStdin: true, cursorBlink: false, fontSize: 13, theme: { background: '#1e1e1e' } });
-  pt.open(termWrap);
-  previewId = s.id; previewTerm = pt;
-  // The grid is sized from the 'peeked' reply to match the session's PTY.
-
-  overlay.onclick = (e) => { if (e.target === overlay) closePreview(); };
-  closeBtn.onclick = closePreview;
-
-  // Backlog now (side-effect-free); live output rides the broadcast.
-  ws.send(JSON.stringify({ type: 'peek', id: s.id }));
-}
-
 document.addEventListener('click', closeContextMenu);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeContextMenu(); closePreview(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeContextMenu(); });

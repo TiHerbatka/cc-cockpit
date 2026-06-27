@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <title>cc-cockpit</title>
-  <link rel="stylesheet" href="/vendor/xterm.css" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -23,13 +22,8 @@
       <span id="claude-mode" class="mode-chip" title="Claude permission mode — click to cycle (Shift+Tab)">–</span>
       <button id="open-docs" class="doc-btn" title="Open local-docs.md">📄 Docs</button>
       <button id="open-todo" class="doc-btn" title="Open TODO.md">✓ TODO</button>
-      <span id="mode-switch">
-        <button data-mode="gui" class="active">GUI</button>
-        <button data-mode="terminal">Terminal</button>
-      </span>
     </div>
     <div id="content">
-      <div id="terminal"></div>
       <div id="gui-pane" hidden></div>
     </div>
   </div>
@@ -40,10 +34,6 @@
       <ul id="error-list"></ul>
     </div>
   </div>
-  <script src="/vendor/xterm.js"></script>
-  <script src="/vendor/addon-fit.js"></script>
-  <script src="/modeparse.js"></script>
-  <script src="/usageparse.js"></script>
   <script src="/compose.js"></script>
   <script src="/gui.js"></script>
   <script src="/app.js"></script>

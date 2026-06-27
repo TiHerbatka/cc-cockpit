@@ -5,7 +5,23 @@
 // Claude Code subscription. This module owns: subscription-only env
 // construction, the streaming-input queue, the posture-A permission callback,
 // the raw-message event source, and teardown.
-const { scrubParentClaudeEnv } = require('./pty');
+// Strip the parent Claude Code session's markers so a spawned child launches like
+// a fresh top-level session (else it would treat itself as a nested child and not
+// persist a transcript). The cockpit's own CC_COCKPIT_* vars are a separate
+// namespace. (Relocated here when the PTY substrate was removed — SDK-only.)
+function scrubParentClaudeEnv(env) {
+  for (const key of Object.keys(env)) {
+    if (
+      key === 'CLAUDECODE' ||
+      key === 'CLAUDE_EFFORT' ||
+      key === 'AI_AGENT' ||
+      key.startsWith('CLAUDE_CODE_')
+    ) {
+      delete env[key];
+    }
+  }
+  return env;
+}
 
 // Map one SDK stream message to the transcript-shaped record(s) the conversation
 // fold (server/normalize.js) consumes. Assistant/user messages carry the
