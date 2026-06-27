@@ -77,9 +77,13 @@ class SessionRegistry extends EventEmitter {
   }
 
   // Send a user turn into the live session (structured input replaces keystrokes).
+  // The SDK does not echo streamed input back as a user message, so fold the turn
+  // into the conversation ourselves (optimistic echo) so it renders immediately.
   send(id, text) {
     const s = this.sessions.get(id);
     if (!s || s.exited) return;
+    const ops = s.conversation.applyRecord({ type: 'user', message: { role: 'user', content: text } });
+    if (ops.length) this.emit('delta', id, ops);
     s.driver.write(text);
     this.markWorking(id);
   }

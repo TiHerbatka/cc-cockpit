@@ -178,8 +178,10 @@ if (openDocsBtn) openDocsBtn.onclick = () => { if (focusedId) ws.send(JSON.strin
 if (openTodoBtn) openTodoBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'open-file', id: focusedId, which: 'todo' })); };
 
 // Terminal mode returns as a deliberate option later; hide its switch for now.
+// (Inline display:none beats the #mode-switch CSS rule, which would override the
+// hidden attribute.)
 const modeSwitchEl = document.getElementById('mode-switch');
-if (modeSwitchEl) modeSwitchEl.hidden = true;
+if (modeSwitchEl) modeSwitchEl.style.display = 'none';
 
 // Distinct shape per state (not just color); working spins, needs-you pulses.
 const STATE_ICON = { working: '⚙︎', 'needs-you': '▲', 'your-move': '●', idle: '○', exited: '✕' };

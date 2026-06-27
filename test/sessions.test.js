@@ -67,6 +67,17 @@ test('send forwards text to the driver and marks the session working', () => {
   assert.strictEqual(reg.get(s.id).status, 'working');
 });
 
+test('send echoes the user text into the conversation model and emits an append delta', () => {
+  const { reg, drivers } = makeRegistry();
+  const s = reg.create('C:/proj/a');
+  const deltas = [];
+  reg.on('delta', (id, ops) => deltas.push(ops));
+  reg.send(s.id, 'hello there');
+  assert.deepStrictEqual(reg.modelOf(s.id).items, [{ kind: 'user', text: 'hello there' }]);
+  assert.ok(deltas.some((ops) => ops.some((o) => o.op === 'append' && o.item.kind === 'user' && o.item.text === 'hello there')));
+  assert.deepStrictEqual(drivers[0].written, ['hello there']);
+});
+
 test('a result message ends the turn -> your-move when unfocused', () => {
   const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/proj/a');         // unfocused, working
