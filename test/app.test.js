@@ -7,20 +7,26 @@ const path = require('node:path');
 const { WebSocket } = require('ws');
 const { createApp } = require('../server/app');
 
-function fakePtyFactory() {
-  const ptys = [];
+// A fake SDK driver factory (mirrors server/sdk.js). Captured drivers let a test
+// drive the message stream via drivers[i]._msg(...).
+function fakeDriverFactory() {
+  const drivers = [];
   const factory = () => {
-    const o = { written: [], resized: [] };
-    o.onData = (cb) => { o._data = cb; };
+    const o = { written: [], killed: false, _msg: null, _exit: null, _error: null };
+    o.onMessage = (cb) => { o._msg = cb; };
     o.onExit = (cb) => { o._exit = cb; };
-    o.write = (d) => o.written.push(d);
-    o.resize = (cols, rows) => o.resized.push([cols, rows]);
-    o.kill = () => {};
-    ptys.push(o);
+    o.onError = (cb) => { o._error = cb; };
+    o.write = (t) => o.written.push(t);
+    o.interrupt = () => {};
+    o.kill = () => { o.killed = true; };
+    drivers.push(o);
     return o;
   };
-  return { factory, ptys };
+  return { factory, drivers };
 }
+
+const asstText = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+const result = (usage) => ({ type: 'result', subtype: 'success', usage });
 
 function nextMessage(ws, predicate) {
   return new Promise((resolve) => {
@@ -28,25 +34,6 @@ function nextMessage(ws, predicate) {
       const msg = JSON.parse(raw);
       if (predicate(msg)) { ws.off('message', handler); resolve(msg); }
     });
-  });
-}
-
-// POST JSON to /hook using a one-shot (agent:false) socket. Avoids the global
-// fetch/undici keep-alive socket, whose lingering timer races --test-force-exit
-// on Windows and aborts with a libuv UV_HANDLE_CLOSING assertion.
-function postHook(port, body) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify(body);
-    const req = http.request(
-      {
-        host: '127.0.0.1', port, path: '/hook', method: 'POST',
-        agent: false,
-        headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) },
-      },
-      (res) => { res.resume(); res.on('end', () => resolve({ status: res.statusCode })); },
-    );
-    req.on('error', reject);
-    req.end(data);
   });
 }
 
@@ -76,9 +63,9 @@ function postJson(port, urlPath, body) {
 
 function tmpRoot() { return fs.mkdtempSync(path.join(os.tmpdir(), 'cockpit-app-')); }
 
-test('create over WS produces a session and streams its output', async () => {
-  const { factory, ptys } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
+test('create over WS produces a session and broadcasts it', async () => {
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -89,43 +76,13 @@ test('create over WS produces a session and streams its output', async () => {
   const sm = await sessionsMsg;
   assert.strictEqual(sm.sessions[0].label, 'demo');
 
-  const outMsg = nextMessage(ws, (m) => m.type === 'output');
-  ptys[0]._data('STREAMED');
-  const om = await outMsg;
-  assert.strictEqual(om.data, 'STREAMED');
-
   ws.close();
   await new Promise((r) => server.close(r));
 });
 
-test('resize over WS forwards dimensions to the session pty', async () => {
-  const { factory, ptys } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const port = server.address().port;
-  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-  await new Promise((r) => ws.on('open', r));
-
-  const sessionsMsg = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
-  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
-  const id = (await sessionsMsg).sessions[0].id;
-
-  // Send resize, then attach; awaiting the attach reply guarantees the prior
-  // resize message was already processed (same-socket message ordering).
-  ws.send(JSON.stringify({ type: 'resize', id, cols: 111, rows: 42 }));
-  const attached = nextMessage(ws, (m) => m.type === 'attached' && m.id === id);
-  ws.send(JSON.stringify({ type: 'attach', id }));
-  await attached;
-
-  assert.deepStrictEqual(ptys[0].resized, [[111, 42]]);
-
-  ws.close();
-  await new Promise((r) => server.close(r));
-});
-
-test('POST /hook state=needs-you flips the session to needs-you and broadcasts', async () => {
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
+test('an assistant message from the driver broadcasts a gui-delta', async () => {
+  const { factory, drivers } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -135,71 +92,91 @@ test('POST /hook state=needs-you flips the session to needs-you and broadcasts',
   ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
   const id = (await created).sessions[0].id;
 
-  const needsYou = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions[0].status === 'needs-you');
-  const res = await postHook(port, { id, state: 'needs-you' });
-  assert.strictEqual(res.status, 204);
-  const sm = await needsYou;
-  assert.strictEqual(sm.sessions[0].status, 'needs-you');
+  const delta = nextMessage(ws, (m) => m.type === 'gui-delta' && m.id === id);
+  drivers[0]._msg(asstText('HELLO'));
+  const d = await delta;
+  assert.ok(d.ops.some((o) => o.op === 'append' && o.item.kind === 'assistant' && o.item.text === 'HELLO'));
 
   ws.close();
   await new Promise((r) => server.close(r));
 });
 
-test('POST /hook state=idle on an unfocused session yields your-move; state=working yields working', async () => {
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
+test('attach sends a gui-snapshot reflecting the session model and acknowledges', async () => {
+  const { factory, drivers } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
   await new Promise((r) => ws.on('open', r));
 
   const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
-  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' })); // starts working, never focused
+  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
+  const id = (await created).sessions[0].id;
+  drivers[0]._msg(asstText('HI THERE')); // build the model
+
+  const snap = nextMessage(ws, (m) => m.type === 'gui-snapshot' && m.id === id);
+  ws.send(JSON.stringify({ type: 'attach', id }));
+  const s = await snap;
+  assert.deepStrictEqual(s.model.items[0], { kind: 'assistant', text: 'HI THERE' });
+
+  ws.close();
+  await new Promise((r) => server.close(r));
+});
+
+test('gui-attach sends a gui-snapshot', async () => {
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
+  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
+  const id = (await created).sessions[0].id;
+
+  const snap = nextMessage(ws, (m) => m.type === 'gui-snapshot' && m.id === id);
+  ws.send(JSON.stringify({ type: 'gui-attach', id }));
+  const s = await snap;
+  assert.deepStrictEqual(s.model, { title: null, items: [], status: { currentTool: null, todos: null } });
+
+  ws.close();
+  await new Promise((r) => server.close(r));
+});
+
+test('a result message broadcasts your-move (unfocused); send then flips to working and reaches the driver', async () => {
+  const { factory, drivers } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
+  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' })); // unfocused, working
   const id = (await created).sessions[0].id;
 
   const yourMove = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions[0].status === 'your-move');
-  await postHook(port, { id, state: 'idle' }); // turn ends while unfocused
+  drivers[0]._msg(result({}));
   await yourMove;
 
   const working = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions[0].status === 'working');
-  await postHook(port, { id, state: 'working' });
-  const sm = await working;
-  assert.strictEqual(sm.sessions[0].status, 'working');
+  ws.send(JSON.stringify({ type: 'send', id, text: 'do it' }));
+  await working;
 
-  ws.close();
-  await new Promise((r) => server.close(r));
-});
-
-test('POST /hook state=idle on the focused session yields idle (not your-move)', async () => {
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const port = server.address().port;
-  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-  await new Promise((r) => ws.on('open', r));
-
-  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
-  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
-  const id = (await created).sessions[0].id;
-
-  // Focus the session, then end its turn; awaiting the attach reply guarantees
-  // the acknowledge was processed before the idle hook arrives.
-  const attached = nextMessage(ws, (m) => m.type === 'attached' && m.id === id);
+  // attach ordering proves the send was processed before we inspect the driver.
+  const snap = nextMessage(ws, (m) => m.type === 'gui-snapshot' && m.id === id);
   ws.send(JSON.stringify({ type: 'attach', id }));
-  await attached;
-
-  const idle = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions[0].status === 'idle');
-  await postHook(port, { id, state: 'idle' });
-  const sm = await idle;
-  assert.strictEqual(sm.sessions[0].status, 'idle');
+  await snap;
+  assert.deepStrictEqual(drivers[0].written, ['do it']);
 
   ws.close();
   await new Promise((r) => server.close(r));
 });
 
-test('POST /hook with an unknown state is a no-op 204', async () => {
-  const { factory } = fakePtyFactory();
-  const { server, registry } = createApp({ spawnPty: factory });
+test('attach acknowledges a your-move session (-> idle)', async () => {
+  const { factory, drivers } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -209,34 +186,58 @@ test('POST /hook with an unknown state is a no-op 204', async () => {
   ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
   const id = (await created).sessions[0].id;
 
-  const res = await postHook(port, { id, state: 'bogus' });
-  assert.strictEqual(res.status, 204);
-  assert.strictEqual(registry.get(id).status, 'working'); // unchanged from spawn
-
-  ws.close();
-  await new Promise((r) => server.close(r));
-});
-
-test('attach acknowledges a needs-you session (-> idle)', async () => {
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const port = server.address().port;
-  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-  await new Promise((r) => ws.on('open', r));
-
-  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
-  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
-  const id = (await created).sessions[0].id;
-
-  const needsYou = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions[0].status === 'needs-you');
-  await postHook(port, { id, state: 'needs-you' });
-  await needsYou;
+  const yourMove = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions[0].status === 'your-move');
+  drivers[0]._msg(result({}));
+  await yourMove;
 
   const idle = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions[0].status === 'idle');
   ws.send(JSON.stringify({ type: 'attach', id }));
   const sm = await idle;
   assert.strictEqual(sm.sessions[0].status, 'idle');
+
+  ws.close();
+  await new Promise((r) => server.close(r));
+});
+
+test('init and result messages broadcast meta (mode then usage)', async () => {
+  const { factory, drivers } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
+  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
+  const id = (await created).sessions[0].id;
+
+  const modeMeta = nextMessage(ws, (m) => m.type === 'meta' && m.id === id && m.mode);
+  drivers[0]._msg({ type: 'system', subtype: 'init', permissionMode: 'default', model: 'm' });
+  assert.strictEqual((await modeMeta).mode, 'default');
+
+  const usageMeta = nextMessage(ws, (m) => m.type === 'meta' && m.id === id && m.usage);
+  drivers[0]._msg(result({ input_tokens: 3 }));
+  assert.strictEqual((await usageMeta).usage.input_tokens, 3);
+
+  ws.close();
+  await new Promise((r) => server.close(r));
+});
+
+test('a driver error is surfaced to the client as an error message', async () => {
+  const { factory, drivers } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
+  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
+  await created;
+
+  const err = nextMessage(ws, (m) => m.type === 'error');
+  drivers[0]._error(new Error('start failed'));
+  assert.match((await err).message, /start failed/);
 
   ws.close();
   await new Promise((r) => server.close(r));
@@ -245,8 +246,8 @@ test('attach acknowledges a needs-you session (-> idle)', async () => {
 test('GET /api/projects lists project folders under the root', async () => {
   const root = tmpRoot();
   fs.mkdirSync(path.join(root, 'alpha'));
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, projectsRoot: root });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory, projectsRoot: root });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
 
@@ -259,8 +260,8 @@ test('GET /api/projects lists project folders under the root', async () => {
 
 test('POST /api/projects creates a project (201) and rejects a duplicate (409)', async () => {
   const root = tmpRoot();
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, projectsRoot: root });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory, projectsRoot: root });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
 
@@ -277,8 +278,8 @@ test('POST /api/projects creates a project (201) and rejects a duplicate (409)',
 
 test('POST /api/projects rejects an invalid name (400)', async () => {
   const root = tmpRoot();
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, projectsRoot: root });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory, projectsRoot: root });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
 
@@ -289,8 +290,8 @@ test('POST /api/projects rejects an invalid name (400)', async () => {
 });
 
 test('WS remove drops the session from the broadcast', async () => {
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -319,14 +320,14 @@ function recentFixture() {
     JSON.stringify({ type: 'ai-title', aiTitle: 'Fixture Session' }),
   ].join('\n') + '\n');
   const t = new Date();
-  fs.utimesSync(f, t, t); // now -> inside any window
+  fs.utimesSync(f, t, t);
   return claudeDir;
 }
 
 test('GET /api/recent returns grouped recent sessions', async () => {
   const claudeDir = recentFixture();
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, claudeDir });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory, claudeDir });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
 
@@ -339,16 +340,16 @@ test('GET /api/recent returns grouped recent sessions', async () => {
   await new Promise((r) => server.close(r));
 });
 
-test('WS resume starts a session and passes resumeId to spawnPty', async () => {
+test('WS resume starts a session and passes resumeId to spawnDriver', async () => {
   const calls = [];
   const factory = (cwd, id, opts) => {
-    const o = { written: [], resized: [] };
-    o.onData = (cb) => { o._data = cb; }; o.onExit = (cb) => { o._exit = cb; };
-    o.write = () => {}; o.resize = () => {}; o.kill = () => {};
+    const o = { written: [] };
+    o.onMessage = () => {}; o.onExit = () => {}; o.onError = () => {};
+    o.write = () => {}; o.interrupt = () => {}; o.kill = () => {};
     calls.push({ cwd, id, opts });
     return o;
   };
-  const { server } = createApp({ spawnPty: factory });
+  const { server } = createApp({ spawnDriver: factory });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -366,47 +367,10 @@ test('WS resume starts a session and passes resumeId to spawnPty', async () => {
   await new Promise((r) => server.close(r));
 });
 
-test('WS peek returns the session buffer without acknowledging or focusing', { timeout: 3000 }, async () => {
-  const { factory, ptys } = fakePtyFactory();
-  const { server, registry } = createApp({ spawnPty: factory });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const port = server.address().port;
-  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-  await new Promise((r) => ws.on('open', r));
-
-  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
-  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
-  const id = (await created).sessions[0].id;
-
-  ptys[0]._data('PEEK-BACKLOG'); // lands in the ring buffer
-
-  // Drive it to needs-you while unfocused, so we can prove peek does NOT clear it.
-  const needsYou = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions[0].status === 'needs-you');
-  await postHook(port, { id, state: 'needs-you' });
-  await needsYou;
-
-  // Resize first; peek must report the session's grid so the preview can match it.
-  // Same-socket ordering guarantees the resize is processed before the peek.
-  ws.send(JSON.stringify({ type: 'resize', id, cols: 100, rows: 40 }));
-
-  const peeked = nextMessage(ws, (m) => m.type === 'peeked' && m.id === id);
-  ws.send(JSON.stringify({ type: 'peek', id }));
-  const pk = await peeked;
-
-  assert.ok(pk.buffer.includes('PEEK-BACKLOG'));            // backlog returned
-  assert.strictEqual(pk.cols, 100);                         // PTY grid size reported
-  assert.strictEqual(pk.rows, 40);
-  assert.strictEqual(registry.get(id).status, 'needs-you'); // NOT acknowledged
-  assert.strictEqual(registry.focusedId, null);             // NOT focused
-
-  ws.close();
-  await new Promise((r) => server.close(r));
-});
-
 test('WS create-temp starts a temporary session (temp:true, project null)', async () => {
   const root = tmpRoot();
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, projectsRoot: root });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory, projectsRoot: root });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -423,8 +387,8 @@ test('WS create-temp starts a temporary session (temp:true, project null)', asyn
 });
 
 test('WS rename changes the session label in the broadcast', async () => {
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -459,8 +423,8 @@ test('GET /api/recent classifies groups as temp, cockpit, or neither', async () 
   };
   seed(tempCwd); seed(cockpitCwd); seed(otherCwd);
 
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, projectsRoot: root, claudeDir });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory, projectsRoot: root, claudeDir });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
 
@@ -475,8 +439,8 @@ test('GET /api/recent classifies groups as temp, cockpit, or neither', async () 
 
 test('WS open-folder invokes the explorer opener with the session cwd', async () => {
   const calls = [];
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, openInExplorer: (dir) => calls.push(dir) });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory, openInExplorer: (dir) => calls.push(dir) });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -486,12 +450,10 @@ test('WS open-folder invokes the explorer opener with the session cwd', async ()
   ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
   const id = (await created).sessions[0].id;
 
-  // Send open-folder, then attach; awaiting the attach reply proves open-folder
-  // was already processed (same-socket ordering).
   ws.send(JSON.stringify({ type: 'open-folder', id }));
-  const attached = nextMessage(ws, (m) => m.type === 'attached' && m.id === id);
+  const snap = nextMessage(ws, (m) => m.type === 'gui-snapshot' && m.id === id);
   ws.send(JSON.stringify({ type: 'attach', id }));
-  await attached;
+  await snap;
   assert.deepStrictEqual(calls, ['C:/proj/demo']);
 
   ws.close();
@@ -499,11 +461,11 @@ test('WS open-folder invokes the explorer opener with the session cwd', async ()
 });
 
 test('open-file opens the cwd doc via the injected opener; missing file -> error', async () => {
-  const calls = [];
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-of-'));
   fs.writeFileSync(path.join(cwd, 'local-docs.md'), '# hi');
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, openFile: (p) => calls.push(p) });
+  const calls = [];
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory, openFile: (p) => calls.push(p) });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -512,9 +474,9 @@ test('open-file opens the cwd doc via the injected opener; missing file -> error
   ws.send(JSON.stringify({ type: 'create', cwd }));
   const id = (await created).sessions[0].id;
 
-  ws.send(JSON.stringify({ type: 'open-file', id, which: 'docs' }));      // exists -> opens
+  ws.send(JSON.stringify({ type: 'open-file', id, which: 'docs' }));
   const errForTodo = nextMessage(ws, (m) => m.type === 'error');
-  ws.send(JSON.stringify({ type: 'open-file', id, which: 'todo' }));      // TODO.md missing -> error
+  ws.send(JSON.stringify({ type: 'open-file', id, which: 'todo' }));
   await errForTodo;
   assert.deepStrictEqual(calls, [path.join(cwd, 'local-docs.md')]);
 
@@ -526,8 +488,8 @@ test('open-file opens the cwd doc via the injected opener; missing file -> error
 test('topics from the per-session file are broadcast on the session', { timeout: 6000 }, async () => {
   const claudeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-app-topics-'));
   fs.mkdirSync(path.join(claudeDir, 'topics'), { recursive: true });
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, claudeDir });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory, claudeDir });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -544,108 +506,10 @@ test('topics from the per-session file are broadcast on the session', { timeout:
   await new Promise((r) => server.close(r));
 });
 
-test('gui-attach streams a normalized snapshot from the session transcript', { timeout: 5000 }, async () => {
-  const claudeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cockpit-gui-'));
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, claudeDir });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const port = server.address().port;
-  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-  await new Promise((r) => ws.on('open', r));
-
-  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
-  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
-  const sess = (await created).sessions[0];
-  const id = sess.id;
-  // Fresh session: ccSessionId === id. Seed its transcript before attaching.
-  const proj = path.join(claudeDir, 'projects', 'enc');
-  fs.mkdirSync(proj, { recursive: true });
-  fs.writeFileSync(path.join(proj, `${sess.ccSessionId}.jsonl`),
-    JSON.stringify({ type: 'user', message: { role: 'user', content: 'Hello GUI' } }) + '\n'
-    + JSON.stringify({ type: 'ai-title', aiTitle: 'Demo' }) + '\n');
-
-  const snap = nextMessage(ws, (m) => m.type === 'gui-snapshot' && m.id === id && m.model.items.length > 0);
-  ws.send(JSON.stringify({ type: 'gui-attach', id }));
-  const sm = await snap;
-  assert.strictEqual(sm.model.title, 'Demo');
-  assert.deepStrictEqual(sm.model.items[0], { kind: 'user', text: 'Hello GUI' });
-
-  ws.send(JSON.stringify({ type: 'gui-detach', id }));
-  ws.close();
-  await new Promise((r) => server.close(r));
-});
-
-test('set-mode over WS updates the broadcast session mode', async () => {
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const port = server.address().port;
-  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-  await new Promise((r) => ws.on('open', r));
-
-  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
-  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
-  const sess = (await created).sessions[0];
-  assert.strictEqual(sess.mode, 'gui');
-
-  const toTerminal = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions[0].mode === 'terminal');
-  ws.send(JSON.stringify({ type: 'set-mode', id: sess.id, mode: 'terminal' }));
-  const sm = await toTerminal;
-  assert.strictEqual(sm.sessions[0].mode, 'terminal');
-
-  ws.close();
-  await new Promise((r) => server.close(r));
-});
-
-test('a native permission prompt is mirrored to the GUI with the pending tool details', { timeout: 5000 }, async () => {
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const port = server.address().port;
-  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-  await new Promise((r) => ws.on('open', r));
-  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
-  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
-  const sess = (await created).sessions[0];
-
-  // PreToolUse notifies the pending tool, then the native prompt fires (/hook needs-you).
-  await postJson(port, '/tool-pending', { sessionId: sess.id, toolName: 'Bash', toolInput: { command: 'rm x' } });
-  const reqMsg = nextMessage(ws, (m) => m.type === 'permission-request' && m.id === sess.id);
-  await postHook(port, { id: sess.id, state: 'needs-you' });
-  const r = await reqMsg;
-  assert.strictEqual(r.tool, 'Bash');
-  assert.deepStrictEqual(r.input, { command: 'rm x' });
-
-  ws.close();
-  await new Promise((r2) => server.close(r2));
-});
-
-test('permission-answer writes the chosen keystroke to the session PTY', async () => {
-  const { factory, ptys } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const port = server.address().port;
-  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
-  await new Promise((r) => ws.on('open', r));
-  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
-  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
-  const sess = (await created).sessions[0];
-
-  // Send the answer, then attach (same-socket ordering guarantees it was processed).
-  ws.send(JSON.stringify({ type: 'permission-answer', id: sess.id, key: '1' }));
-  const attached = nextMessage(ws, (m) => m.type === 'attached' && m.id === sess.id);
-  ws.send(JSON.stringify({ type: 'attach', id: sess.id }));
-  await attached;
-  assert.deepStrictEqual(ptys[0].written, ['1']);
-
-  ws.close();
-  await new Promise((r2) => server.close(r2));
-});
-
 test('GET /api/projects includes lastActivity per project', async () => {
   const root = tmpRoot();
   fs.mkdirSync(path.join(root, 'alpha'));
-  fs.mkdirSync(path.join(root, 'beta')); // no sessions -> lastActivity null
+  fs.mkdirSync(path.join(root, 'beta'));
   const claudeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cockpit-app-pa-'));
   const pd = path.join(claudeDir, 'projects', 'enc');
   fs.mkdirSync(pd, { recursive: true });
@@ -654,8 +518,8 @@ test('GET /api/projects includes lastActivity per project', async () => {
   const t = new Date();
   fs.utimesSync(f, t, t);
 
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, projectsRoot: root, claudeDir });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory, projectsRoot: root, claudeDir });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
 
@@ -670,8 +534,8 @@ test('GET /api/projects includes lastActivity per project', async () => {
 
 test('POST /api/upload-image saves the file and auto-names it; rejects non-image/unknown-id', async () => {
   const sessionCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-upload-'));
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -707,8 +571,8 @@ test('WS open-image opens the file via the injected opener; outside path -> erro
   fs.writeFileSync(insidePath, 'fake png');
 
   const calls = [];
-  const { factory } = fakePtyFactory();
-  const { server } = createApp({ spawnPty: factory, openFile: (p) => calls.push(p) });
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory, openFile: (p) => calls.push(p) });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -718,14 +582,12 @@ test('WS open-image opens the file via the injected opener; outside path -> erro
   ws.send(JSON.stringify({ type: 'create', cwd: sessionCwd }));
   const id = (await created).sessions[0].id;
 
-  // inside path -> openFile called; use attach ordering to prove it was processed
   ws.send(JSON.stringify({ type: 'open-image', id, path: insidePath }));
-  const attached = nextMessage(ws, (m) => m.type === 'attached' && m.id === id);
+  const snap = nextMessage(ws, (m) => m.type === 'gui-snapshot' && m.id === id);
   ws.send(JSON.stringify({ type: 'attach', id }));
-  await attached;
+  await snap;
   assert.deepStrictEqual(calls, [insidePath]);
 
-  // outside path -> error reply; openFile not called again
   const errMsg = nextMessage(ws, (m) => m.type === 'error');
   ws.send(JSON.stringify({ type: 'open-image', id, path: path.join(sessionCwd, 'secret.txt') }));
   await errMsg;
