@@ -1,0 +1,51 @@
+# cc-cockpit — Local docs
+
+Working notes and the most important takeaways. Most recent session: 2026-06-27.
+
+## Session takeaways — 2026-06-27 (commercialization + programmatic re-architecture)
+
+### 1. Commercialization & ToS (TPC3 — resolved, cleared to develop)
+
+- **Verdict:** LOW–MEDIUM risk, a *tolerated gray area* — not affirmatively blessed, but not prohibited. The user resolved the topic and we proceed with development.
+- **Core thesis (verified):** A tool that only **launches the user's own, unmodified, official `claude` binary** under the user's own subscription login, and **never touches credentials**, is NOT prohibited. Anthropic's own legal-and-compliance doc says subscription OAuth "is designed to support ordinary use of Claude Code".
+- **Two-paywall business model (clean):** Each end user installs the official Claude app themselves and pays Anthropic for their **own** Claude subscription; separately they pay a small (~$1–5/mo) cc-cockpit software subscription. cc-cockpit's subscription is scoped purely to cc-cockpit's own features — it never meters, gates, resells, pools, or impacts Claude usage.
+- **The only two named prohibitions** (from code.claude.com/docs/en/legal-and-compliance) — cc-cockpit does neither: (a) offering a Claude.ai login flow for your product; (b) routing requests through Free/Pro/Max credentials **on behalf of** users.
+- **What actually got other tools banned** (OpenClaw, Roo Code, Goose, etc., early 2026): they **extracted the subscription OAuth token** and used it in their own API client / on servers, bypassing the official tooling. The **zero-token invariant** is the load-bearing legal distinction: cc-cockpit must NEVER read, store, cache, proxy, extract, or transmit OAuth tokens or credentials.
+- **Enforcement ceiling** (realistic worst case): C&D / nudge to API keys / metered-economics pressure + reversible abuse-flag suspension under abnormal concurrency — NOT a targeted ban, as long as the zero-token invariant holds.
+- **Business customers are the cleaner path, not the riskier one:** selling B2B software is not reselling access; employees authenticating their own Team/Enterprise seats run under the Commercial Terms (business use expressly permitted). Only thing to avoid: nudging consumer Pro/Max users into business use.
+- **Guardrails to preserve in the build:** zero-token invariant; subscription-only env scrub at spawn; offer a first-class BYO-API-key path; market it as orchestration (not "cheaper than API", not "personal plan for business"); headless mode is the highest-risk surface; do not rely on `forceLoginMethod` (version-churned + open bug, belt-and-suspenders only — env scrubbing is the real guard).
+- **Outreach:** A private email asking Anthropic the commercial question head-on is drafted and saved at `docs/outreach/2026-06-27-anthropic-compliance-question-email.md`. Probability of a meaningful reply from a small dev is LOW; asking risks converting tolerated-gray into an on-record denial. User will review and decide whether/how to send.
+- Not legal advice; consult counsel before scaling.
+
+### 2. Re-architecture to programmatic interaction (TPC2 — active)
+
+- **Decision:** Replace PTY screen-driving, project-wide, with **structured headless interaction** driving the user's own official `claude` binary. Driving by scraping the terminal screen is a weak foundation; interact programmatically instead.
+- **Substrate choice:** Drive the **raw `claude` CLI in stream-json mode** (`--input-format stream-json --output-format stream-json --include-partial-messages`) rather than the Agent SDK, for the subscription core. Rationale: cleanest legal posture (it's literally the user's own installed binary), no new dependency, no build step, we hold the child-process handle directly (full env control), and it is a near drop-in for the existing spawn path. The Agent SDK is reserved for a possible future BYO-API-key tier.
+- **Plan / sequencing:** Once TPC2 work begins in earnest — first **archive the current PTY implementation to a separate branch** (so we can return / pull from it), then restructure. **PTY is demoted to a fallback only** (used if the GUI path fails); in the target architecture the GUI no longer interacts with the PTY.
+- **Hard constraint:** one durable streaming session per cockpit session.
+- **Open design decisions (next):** (1) confirm the stream-json control protocol shapes (send prompt, answer permission, interrupt) via a spike; (2) what the GUI renders when PTY is no longer primary; (3) the incremental migration path; (4) the design spec (this re-architecture has no `docs/` spec yet — brainstorming → spec → plan is the process).
+
+### 3. Empirical auth findings (verified on this machine, 2026-06-27)
+
+- This machine has **no API key** (`ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_URL` all unset), so any successful `claude` call here is proof of **subscription** auth.
+- **Raw CLI stream-json uses the subscription.** `claude -p --output-format stream-json --verbose "..."` returned `"apiKeySource":"none"` in its `system/init` message, a `rate_limit_event` of `"rateLimitType":"five_hour"` (the subscription window), and a `result/success`.
+- **The Agent SDK also uses the subscription.** `@anthropic-ai/claude-agent-sdk` (v0.3.195) `query()` with no API key returned the same `apiKeySource:"none"` + `five_hour` rate-limit + success. So the SDK's "use an API key" guidance is a ToS/business statement, **not** a technical requirement — its bundled `claude` reads the same OAuth login.
+- **Env scrub is mandatory when spawning from inside a Claude Code session.** The parent leaks `CLAUDECODE`, `CLAUDE_CODE_*` (incl. `CLAUDE_CODE_CHILD_SESSION`), `AI_AGENT`, `CLAUDE_EFFORT`. cc-cockpit's `scrubParentClaudeEnv` strips exactly these; without it the spawned `claude` behaves like a nested child session (the earlier no-transcript bug).
+- **Output protocol shapes (captured):** stream-json output emits newline-delimited JSON — `system/init` (carries `cwd`, `session_id`, `tools`, `model`, `apiKeySource`, `permissionMode`), `assistant` (content array), `rate_limit_event`, and a terminal `result` (`subtype`, `is_error`, `result`, `usage`, `total_cost_usd`). SessionStart hooks also surface as `system/hook_started` + `system/hook_response`.
+
+### 4. Current architecture map (what TPC2 changes)
+
+- **cc-cockpit is already half-structured, not a pure screen-scraper.** In GUI mode, OUTPUT is structured: it tails the session's `~/.claude/projects/*/<id>.jsonl` transcript (250 ms poll) and runs it through `server/normalize.js` into typed items (`user`/`assistant`/`thinking`/`tool`/`todos`). The GUI renders from that model, not from terminal bytes.
+- **What is still keystroke- or screen-derived (the real target of TPC2):** submit (`text + "\r"` into the PTY + a 3× bare-Enter "nudge" timer fighting a TUI race); permission answers (digit keystrokes `1`/`2`/`3` to the PTY); interrupt/mode (`\x1b`, `\x1b[Z`); the mode + usage chips (`readFooter()` scrapes xterm's cell grid + regex in `modeparse.js`/`usageparse.js`); and the output transport itself (a disk poll, not a live stream).
+- **The prize of TPC2** is a structured **input + control** channel (plus a live structured output stream), which deletes the nudge timer, the digit-keystroke permissions, the escape-code hacks, and the footer scraping. The existing `normalize()` model is largely reusable as the render target.
+- **Biggest coupling points to change:** the raw-bytes → xterm sink; `server/buffer.js` RingBuffer (stores raw bytes); the `peek`/`peeked` preview replay; the footer scraping; interrupt/mode escape codes; the compose-submit + nudge path; permission-answer keystrokes; PTY resize semantics; the `--session-id` + transcript-tail machinery (replaced by reading stdout directly); the `gui`/`terminal` dual-mode split.
+
+### 5. Agent SDK process model (facts, for the BYO-API-key tier later)
+
+- `query()` **spawns and owns a local `claude` subprocess** (a binary bundled in the npm package, version-pinned to the SDK) and talks to it over stdio — it is NOT a thin network client to the API.
+- The caller does **not** get a raw OS process handle; you configure the spawn via options (`env` — note it **replaces** the env, doesn't merge; `cwd`; `pathToClaudeCodeExecutable`; `executable`; `executableArgs`; `settings`; `permissionMode`; `canUseTool`) and control it via SDK methods (`abortController`, `setPermissionMode`, `streamInput`, the message stream); `resume`/`continue` for sessions.
+- You CAN fully control the child env (strip inherited vars by not spreading `process.env`) and point it at a different executable via `pathToClaudeCodeExecutable`.
+
+### 6. Other
+
+- **A1.7 done:** image-token drag-to-reposition in the GUI compose box is implemented, committed (`44037c1`), 130 tests pass.
