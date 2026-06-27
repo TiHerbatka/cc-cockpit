@@ -425,4 +425,13 @@ function mountGui(container, handlers) {
   };
 }
 
+// Read-only render of a model into a container (for the quick preview): reuses the
+// status + log renderers; no compose box or side panels.
+function renderGuiModel(container, model) {
+  container.innerHTML = '<div class="gui-status"></div><div class="gui-log"></div>';
+  renderStatus(container.querySelector('.gui-status'), model);
+  renderLog(container.querySelector('.gui-log'), model);
+}
+
 window.mountGui = mountGui;
+window.renderGuiModel = renderGuiModel;

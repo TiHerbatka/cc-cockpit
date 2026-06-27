@@ -171,9 +171,7 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .preview-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid #3c3c3c; color: #9cdcfe; font-size: 13px; }
 .preview-close { background: none; border: none; color: #888; cursor: pointer; font-size: 14px; }
 .preview-close:hover { color: #f14c4c; }
-.preview-term { flex: 1; min-height: 0; min-width: 0; padding: 4px; overflow: hidden; }
-.preview-term .xterm-viewport { scrollbar-width: none; }
-.preview-term .xterm-viewport::-webkit-scrollbar { display: none; }
+.preview-gui { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 8px; }
 /* GUI error center (fixed, bottom-right) */
 #error-center { position: fixed; right: 12px; bottom: 12px; z-index: 60; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 #error-toggle { background: #5a2d2d; color: #fff; border: 1px solid #7a3a3a; border-radius: 14px; padding: 4px 10px; cursor: pointer; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }

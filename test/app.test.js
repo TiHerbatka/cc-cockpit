@@ -243,6 +243,29 @@ test('a driver error is surfaced to the client as an error message', async () =>
   await new Promise((r) => server.close(r));
 });
 
+test('peek returns the session model without acknowledging or focusing', async () => {
+  const { factory, drivers } = fakeDriverFactory();
+  const { server, registry } = createApp({ spawnDriver: factory });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
+  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/proj/demo' }));
+  const id = (await created).sessions[0].id;
+  drivers[0]._msg(asstText('HELLO PREVIEW'));
+
+  const peeked = nextMessage(ws, (m) => m.type === 'peeked' && m.id === id);
+  ws.send(JSON.stringify({ type: 'peek', id }));
+  const pk = await peeked;
+  assert.deepStrictEqual(pk.model.items[0], { kind: 'assistant', text: 'HELLO PREVIEW' });
+  assert.strictEqual(registry.focusedId, null); // peek must not focus/acknowledge
+
+  ws.close();
+  await new Promise((r) => server.close(r));
+});
+
 test('GET /api/projects lists project folders under the root', async () => {
   const root = tmpRoot();
   fs.mkdirSync(path.join(root, 'alpha'));

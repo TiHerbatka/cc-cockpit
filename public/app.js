@@ -6,6 +6,13 @@ let sessions = [];
 let focusedId = null;
 let ctxMenuEl = null;
 
+// Quick-preview state: a read-only GUI view of any session, kept live via the
+// gui-delta broadcast (never focuses/acknowledges the session).
+let previewId = null;
+let previewModel = null;
+let previewBody = null;
+let previewOverlay = null;
+
 const listEl = document.getElementById('session-list');
 const errorEl = document.getElementById('error');
 
@@ -230,8 +237,12 @@ ws.addEventListener('message', (ev) => {
   } else if (m.type === 'gui-snapshot' && m.id === focusedId) {
     guiModel = m.model;
     gui.update(guiModel);
-  } else if (m.type === 'gui-delta' && m.id === focusedId) {
-    if (guiModel) { applyDelta(guiModel, m.ops); gui.update(guiModel); }
+  } else if (m.type === 'gui-delta') {
+    if (m.id === focusedId && guiModel) { applyDelta(guiModel, m.ops); gui.update(guiModel); }
+    if (m.id === previewId && previewModel) { applyDelta(previewModel, m.ops); window.renderGuiModel(previewBody, previewModel); }
+  } else if (m.type === 'peeked' && m.id === previewId) {
+    previewModel = m.model;
+    window.renderGuiModel(previewBody, previewModel);
   } else if (m.type === 'meta' && m.id === focusedId) {
     renderMeta(m);
   } else if (m.type === 'error') {
@@ -578,6 +589,7 @@ function openContextMenu(x, y, s) {
   const menu = document.createElement('div');
   menu.className = 'ctx-menu';
   const items = [
+    { label: 'Quick preview', act: () => openPreview(s) },
     { label: 'Open folder', act: () => ws.send(JSON.stringify({ type: 'open-folder', id: s.id })) },
     { label: 'Rename', act: () => openRenameModal(s) },
   ];
@@ -612,5 +624,40 @@ function openRenameModal(s) {
   });
 }
 
+// ---- Quick preview (read-only, in-GUI) --------------------------------------
+// A modal mirroring a session's conversation model read-only, WITHOUT focusing
+// it: 'peek' fetches the current model (no acknowledge); live gui-delta
+// broadcasts keep it current (filtered by preview id).
+function closePreview() {
+  if (previewOverlay && previewOverlay.parentNode) previewOverlay.remove();
+  previewId = null; previewModel = null; previewBody = null; previewOverlay = null;
+}
+
+function openPreview(s) {
+  closePreview(); // one preview at a time
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  const box = document.createElement('div');
+  box.className = 'preview-box';
+  const head = document.createElement('div');
+  head.className = 'preview-head';
+  const title = document.createElement('span');
+  title.textContent = `Preview — ${s.label} (read-only)`;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'preview-close';
+  closeBtn.textContent = '✕';
+  head.append(title, closeBtn);
+  const body = document.createElement('div');
+  body.className = 'preview-gui';
+  body.textContent = 'Loading…';
+  box.append(head, body);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  previewId = s.id; previewOverlay = overlay; previewBody = body;
+  overlay.onclick = (e) => { if (e.target === overlay) closePreview(); };
+  closeBtn.onclick = closePreview;
+  ws.send(JSON.stringify({ type: 'peek', id: s.id }));
+}
+
 document.addEventListener('click', closeContextMenu);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeContextMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeContextMenu(); closePreview(); } });

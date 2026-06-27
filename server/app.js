@@ -168,6 +168,12 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
         sendSnapshot(ws, m.id);
       } else if (m.type === 'gui-detach') {
         /* deltas are broadcast; nothing to tear down per-socket */
+      } else if (m.type === 'peek') {
+        // Side-effect-free read for the quick preview: the session's current model
+        // WITHOUT acknowledging or focusing it. Live updates ride the gui-delta
+        // broadcast (the client filters by preview id).
+        const model = registry.modelOf(m.id);
+        if (model) ws.send(JSON.stringify({ type: 'peeked', id: m.id, model }));
       } else if (m.type === 'remove') {
         registry.remove(m.id);
       } else if (m.type === 'rename') {
