@@ -6,7 +6,7 @@ const { SessionRegistry } = require('../server/sessions');
 // registers onMessage/onExit/onError synchronously in create(), so a test drives
 // the stream via driver._msg(...) / driver._exit() / driver._error(...).
 function makeFakeDriver() {
-  const o = { written: [], killed: false, interrupted: false, answered: [], modeSet: [], modelSet: [], _msg: null, _exit: null, _error: null, _interaction: null };
+  const o = { written: [], killed: false, interrupted: false, answered: [], modeSet: [], modelSet: [], effortSet: [], _msg: null, _exit: null, _error: null, _interaction: null };
   o.onMessage = (cb) => { o._msg = cb; };
   o.onExit = (cb) => { o._exit = cb; };
   o.onError = (cb) => { o._error = cb; };
@@ -16,6 +16,7 @@ function makeFakeDriver() {
   o.interrupt = () => { o.interrupted = true; };
   o.setPermissionMode = (m) => o.modeSet.push(m);
   o.setModel = (m) => o.modelSet.push(m);
+  o.setEffort = (l) => o.effortSet.push(l);
   o.kill = () => { o.killed = true; };
   return o;
 }
@@ -140,7 +141,7 @@ test('answerInteraction resolves via the driver, clears pending, and resumes wor
   assert.strictEqual(reg.get(s.id).status, 'working');
 });
 
-test('interrupt / setPermissionMode / setModel route to the driver; mode+model emit meta', () => {
+test('interrupt / setPermissionMode / setModel / setEffort route to the driver and emit meta', () => {
   const { reg, drivers } = makeRegistry();
   const s = reg.create('C:/proj/a');
   const metas = [];
@@ -148,11 +149,14 @@ test('interrupt / setPermissionMode / setModel route to the driver; mode+model e
   reg.interrupt(s.id);
   reg.setPermissionMode(s.id, 'plan');
   reg.setModel(s.id, 'claude-sonnet-4-6');
+  reg.setEffort(s.id, 'high');
   assert.strictEqual(drivers[0].interrupted, true);
   assert.deepStrictEqual(drivers[0].modeSet, ['plan']);
   assert.deepStrictEqual(drivers[0].modelSet, ['claude-sonnet-4-6']);
+  assert.deepStrictEqual(drivers[0].effortSet, ['high']);
   assert.ok(metas.some((m) => m.mode === 'plan'));
   assert.ok(metas.some((m) => m.model === 'claude-sonnet-4-6'));
+  assert.ok(metas.some((m) => m.effort === 'high'));
 });
 
 test('resume seeds the conversation model from loaded transcript records', () => {

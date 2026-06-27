@@ -184,6 +184,8 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
         registry.setPermissionMode(m.id, m.mode);
       } else if (m.type === 'set-model') {
         registry.setModel(m.id, m.model);
+      } else if (m.type === 'set-effort') {
+        registry.setEffort(m.id, m.level);
       } else if (m.type === 'attach') {
         registry.acknowledge(m.id);
         sendSnapshot(ws, m.id);

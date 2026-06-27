@@ -136,16 +136,17 @@ test('onElicitation parks as kind elicitation and resolves with the ElicitResult
   assert.deepStrictEqual(await p, { action: 'accept', content: { name: 'Bob' } });
 });
 
-test('setPermissionMode / setModel / interrupt call through to the query object', () => {
+test('setPermissionMode / setModel / setEffort / interrupt call through to the query object', () => {
   const calls = [];
   const fakeQ = Object.assign((async function* () {})(), {
     setPermissionMode: (m) => calls.push(['mode', m]),
     setModel: (m) => calls.push(['model', m]),
+    applyFlagSettings: (s) => calls.push(['effort', s.effort]),
     interrupt: () => calls.push(['interrupt']),
   });
   const d = createSdkDriver('C:/x', 'id', {}, { query: () => fakeQ });
-  d.setPermissionMode('plan'); d.setModel('claude-sonnet-4-6'); d.interrupt();
-  assert.deepStrictEqual(calls, [['mode', 'plan'], ['model', 'claude-sonnet-4-6'], ['interrupt']]);
+  d.setPermissionMode('plan'); d.setModel('claude-sonnet-4-6'); d.setEffort('high'); d.interrupt();
+  assert.deepStrictEqual(calls, [['mode', 'plan'], ['model', 'claude-sonnet-4-6'], ['effort', 'high'], ['interrupt']]);
 });
 
 test('createSdkDriver builds subscription-only options (scrubbed env, settingSources, resume)', () => {

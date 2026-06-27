@@ -146,6 +146,15 @@ class SessionRegistry extends EventEmitter {
     this.emit('meta', id, { model });
   }
 
+  // Switch the reasoning effort mid-session (chip updates optimistically via meta;
+  // the SDK init stream doesn't report current effort, so this is set-only).
+  setEffort(id, level) {
+    const s = this.sessions.get(id);
+    if (!s || s.exited) return;
+    if (s.driver.setEffort) s.driver.setEffort(level);
+    this.emit('meta', id, { effort: level });
+  }
+
   // The current render model (full snapshot for attach/resume).
   modelOf(id) {
     const s = this.sessions.get(id);

@@ -201,10 +201,14 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .preview-close:hover { color: #f14c4c; }
 .preview-gui { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 8px; }
 /* GUI error center (fixed, bottom-right) */
-#error-center { position: fixed; right: 12px; bottom: 12px; z-index: 60; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-#error-toggle { background: #5a2d2d; color: #fff; border: 1px solid #7a3a3a; border-radius: 14px; padding: 4px 10px; cursor: pointer; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+/* Error bubble: sits between the header and the session list; only shows when
+   there are errors. Clicking it floats the list (fixed) so the sidebar layout
+   doesn't shift. */
+#error-center { margin: 4px 0 8px; }
+#error-toggle { width: 100%; text-align: left; background: #e3b341; color: #1e1e1e; border: 1px solid #c89a2e; border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+#error-toggle:hover { background: #edc257; }
 #error-toggle[hidden] { display: none; }
-#error-panel { width: min(520px, 92vw); max-height: 60vh; background: #252526; border: 1px solid #5a3a3a; border-radius: 6px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
+#error-panel { position: fixed; left: 12px; top: 52px; z-index: 80; width: min(520px, 70vw); max-height: 70vh; background: #252526; border: 1px solid #5a3a3a; border-radius: 6px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.6); }
 #error-panel[hidden] { display: none; }
 .error-panel-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-bottom: 1px solid #3c3c3c; color: #e2a23b; font-size: 12px; }
 .error-panel-head button { background: none; border: none; color: #888; cursor: pointer; font-size: 12px; }

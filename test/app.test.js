@@ -12,7 +12,7 @@ const { createApp } = require('../server/app');
 function fakeDriverFactory() {
   const drivers = [];
   const factory = () => {
-    const o = { written: [], killed: false, interrupted: false, answered: [], modeSet: [], modelSet: [], _msg: null, _exit: null, _error: null, _interaction: null };
+    const o = { written: [], killed: false, interrupted: false, answered: [], modeSet: [], modelSet: [], effortSet: [], _msg: null, _exit: null, _error: null, _interaction: null };
     o.onMessage = (cb) => { o._msg = cb; };
     o.onExit = (cb) => { o._exit = cb; };
     o.onError = (cb) => { o._error = cb; };
@@ -22,6 +22,7 @@ function fakeDriverFactory() {
     o.interrupt = () => { o.interrupted = true; };
     o.setPermissionMode = (m) => o.modeSet.push(m);
     o.setModel = (m) => o.modelSet.push(m);
+    o.setEffort = (l) => o.effortSet.push(l);
     o.kill = () => { o.killed = true; };
     drivers.push(o);
     return o;
@@ -290,12 +291,14 @@ test('interrupt / set-permission-mode / set-model reach the driver', async () =>
   ws.send(JSON.stringify({ type: 'interrupt', id }));
   ws.send(JSON.stringify({ type: 'set-permission-mode', id, mode: 'plan' }));
   ws.send(JSON.stringify({ type: 'set-model', id, model: 'claude-sonnet-4-6' }));
+  ws.send(JSON.stringify({ type: 'set-effort', id, level: 'high' }));
   const snap = nextMessage(ws, (m) => m.type === 'gui-snapshot' && m.id === id); // attach ordering
   ws.send(JSON.stringify({ type: 'attach', id }));
   await snap;
   assert.strictEqual(drivers[0].interrupted, true);
   assert.deepStrictEqual(drivers[0].modeSet, ['plan']);
   assert.deepStrictEqual(drivers[0].modelSet, ['claude-sonnet-4-6']);
+  assert.deepStrictEqual(drivers[0].effortSet, ['high']);
 
   ws.close();
   await new Promise((r2) => server.close(r2));

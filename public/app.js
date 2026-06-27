@@ -150,6 +150,7 @@ const claudeModeEl = document.getElementById('claude-mode');
 const interruptBtn = document.getElementById('interrupt-btn');
 const usageEl = document.getElementById('usage-chip');
 const modelSelect = document.getElementById('model-select');
+const effortSelect = document.getElementById('effort-select');
 // All six permission modes, each with a one-line explanation shown as a hover
 // tooltip on a ? icon in the dropdown.
 const MODES = [
@@ -165,6 +166,7 @@ const MODES = [
 function renderMeta(meta) {
   if (meta.mode && claudeModeEl) claudeModeEl.textContent = meta.mode;
   if (meta.model && modelSelect) { for (const o of modelSelect.options) o.selected = (meta.model === o.value || meta.model.startsWith(o.value)); }
+  if (meta.effort && effortSelect) { for (const o of effortSelect.options) o.selected = (o.value === meta.effort); }
   if (meta.usage && usageEl) {
     const u = meta.usage;
     const inTok = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
@@ -198,6 +200,7 @@ function openModeMenu() {
 if (claudeModeEl) claudeModeEl.onclick = (e) => { e.stopPropagation(); openModeMenu(); };
 // Switch the model.
 if (modelSelect) modelSelect.onchange = () => { if (focusedId) ws.send(JSON.stringify({ type: 'set-model', id: focusedId, model: modelSelect.value })); };
+if (effortSelect) effortSelect.onchange = () => { if (focusedId) ws.send(JSON.stringify({ type: 'set-effort', id: focusedId, level: effortSelect.value })); };
 // Doc buttons: open the focused session's local-docs.md / TODO.md via the OS default app.
 const openDocsBtn = document.getElementById('open-docs');
 const openTodoBtn = document.getElementById('open-todo');

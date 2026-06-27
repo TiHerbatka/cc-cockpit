@@ -8,6 +8,13 @@
 <body>
   <div id="sidebar">
     <h1>cc-cockpit</h1>
+    <div id="error-center">
+      <button id="error-toggle" title="GUI errors" hidden>⚠ <span id="error-count">0</span> error(s)</button>
+      <div id="error-panel" hidden>
+        <div class="error-panel-head"><span>GUI errors (<span id="error-count2">0</span>)</span><span><button id="error-clear">clear</button> <button id="error-close">✕</button></span></div>
+        <ul id="error-list"></ul>
+      </div>
+    </div>
     <ul id="session-list"></ul>
     <button id="add-btn">+ New session</button>
     <button id="resume-btn">Resume…</button>
@@ -25,18 +32,18 @@
         <option value="claude-sonnet-4-6">Sonnet 4.6</option>
         <option value="claude-haiku-4-5">Haiku 4.5</option>
       </select>
+      <select id="effort-select" class="model-select" title="Reasoning effort">
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high" selected>high</option>
+        <option value="xhigh">xhigh</option>
+        <option value="max">max</option>
+      </select>
       <button id="open-docs" class="doc-btn" title="Open local-docs.md">📄 Docs</button>
       <button id="open-todo" class="doc-btn" title="Open TODO.md">✓ TODO</button>
     </div>
     <div id="content">
       <div id="gui-pane" hidden></div>
-    </div>
-  </div>
-  <div id="error-center">
-    <button id="error-toggle" title="GUI errors" hidden>⚠ <span id="error-count">0</span></button>
-    <div id="error-panel" hidden>
-      <div class="error-panel-head"><span>GUI errors (<span id="error-count2">0</span>)</span><span><button id="error-clear">clear</button> <button id="error-close">✕</button></span></div>
-      <ul id="error-list"></ul>
     </div>
   </div>
   <script src="/compose.js"></script>

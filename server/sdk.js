@@ -183,6 +183,8 @@ function createSdkDriver(cwd, id, opts = {}, deps = {}) {
     interrupt: () => { try { if (q && typeof q.interrupt === 'function') return q.interrupt(); } catch { /* ignore */ } },
     setPermissionMode: (mode) => { try { if (q && typeof q.setPermissionMode === 'function') return q.setPermissionMode(mode); } catch { /* ignore */ } },
     setModel: (model) => { try { if (q && typeof q.setModel === 'function') return q.setModel(model); } catch { /* ignore */ } },
+    // Effort has no dedicated control method; it lives in the flag-settings layer.
+    setEffort: (level) => { try { if (q && typeof q.applyFlagSettings === 'function') return q.applyFlagSettings({ effort: level }); } catch { /* ignore */ } },
     kill: () => { try { ac.abort(); } catch { /* ignore */ } input.close(); },
   };
 }
