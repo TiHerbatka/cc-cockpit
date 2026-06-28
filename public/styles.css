@@ -165,6 +165,9 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .older-toggle { flex: 0 0 auto; background: #3a3d41; color: #fff; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 12px; white-space: nowrap; }
 .older-toggle:hover { background: #4a4d51; }
 .older-toggle.active { background: #0e639c; }
+.never-used-chip { flex: 0 0 auto; font-size: 11px; color: #d9a441; background: rgba(217, 164, 65, 0.12); border: 1px solid rgba(217, 164, 65, 0.4); border-radius: 4px; padding: 2px 8px; cursor: pointer; white-space: nowrap; }
+.never-used-chip[hidden] { display: none; }
+.never-used-chip:hover { background: rgba(217, 164, 65, 0.2); }
 .resume-cols.flat { grid-template-columns: 1fr; }
 .scope-switch { display: flex; gap: 4px; }
 .scope-switch button { flex: 1; background: #2d2d30; color: #bbb; border: 1px solid #3c3c3c; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }

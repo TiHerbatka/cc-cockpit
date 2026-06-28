@@ -354,6 +354,7 @@ function openNewSessionPicker() {
       '<div class="modal-toolbar">' +
         '<input class="modal-search" placeholder="Search by name or path…" />' +
         '<button class="older-toggle">Older than 7 days ▸</button>' +
+        '<button class="never-used-chip" hidden></button>' +
       '</div>' +
       '<div class="resume-cols">Loading…</div>' +
       '<div class="modal-create"><input placeholder="new project name" /><button>Create &amp; start</button></div>' +
@@ -364,6 +365,16 @@ function openNewSessionPicker() {
     const input = box.querySelector('.modal-create input');
     const createBtn = box.querySelector('.modal-create button');
     const scopeBtns = [...box.querySelectorAll('.scope-switch button')];
+    const chip = box.querySelector('.never-used-chip');
+    const neverUsed = () => projects.filter((p) => !p.lastActivity).sort((a, b) => a.name.localeCompare(b.name));
+    const renderChip = () => {
+      const nu = scope === 'cockpit' ? neverUsed() : [];
+      chip.hidden = nu.length === 0;
+      if (nu.length) {
+        chip.textContent = `⚠ ${nu.length} never used`;
+        chip.title = `${nu.length} project${nu.length > 1 ? 's' : ''} created but never used — click to list`;
+      }
+    };
     const startIn = (cwd) => { ws.send(JSON.stringify({ type: 'create', cwd })); close(); };
     box.querySelector('.temp-btn').onclick = () => { ws.send(JSON.stringify({ type: 'create-temp' })); close(); };
 
@@ -453,6 +464,7 @@ function openNewSessionPicker() {
       scope = b.dataset.scope;
       scopeBtns.forEach((x) => x.classList.toggle('active', x === b));
       if (scope === 'discovered') await ensureDiscovered(); else render();
+      renderChip();
     }; });
 
     olderToggle.onclick = async () => {
@@ -466,6 +478,7 @@ function openNewSessionPicker() {
       const res = await fetch('/api/projects');
       projects = (await res.json()).projects;
       render();
+      renderChip();
     } catch { cols.textContent = 'Failed to load projects.'; }
     search.addEventListener('input', render);
 
