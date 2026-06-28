@@ -366,14 +366,43 @@ function openNewSessionPicker() {
     const createBtn = box.querySelector('.modal-create button');
     const scopeBtns = [...box.querySelectorAll('.scope-switch button')];
     const chip = box.querySelector('.never-used-chip');
+    let popover = null;
+    let onDocClick = null;
+    const closePopover = () => {
+      if (onDocClick) { document.removeEventListener('click', onDocClick); onDocClick = null; }
+      if (popover) { popover.remove(); popover = null; }
+    };
     const neverUsed = () => projects.filter((p) => !p.lastActivity).sort((a, b) => a.name.localeCompare(b.name));
     const renderChip = () => {
+      closePopover();
       const nu = scope === 'cockpit' ? neverUsed() : [];
       chip.hidden = nu.length === 0;
       if (nu.length) {
         chip.textContent = `⚠ ${nu.length} never used`;
         chip.title = `${nu.length} project${nu.length > 1 ? 's' : ''} created but never used — click to list`;
       }
+    };
+    chip.onclick = (e) => {
+      e.stopPropagation();
+      if (popover) { closePopover(); return; }
+      const nu = neverUsed();
+      popover = document.createElement('div');
+      popover.className = 'never-used-popover';
+      const head = document.createElement('div');
+      head.className = 'never-used-head';
+      head.textContent = `Never used (${nu.length})`;
+      popover.appendChild(head);
+      for (const p of nu) {
+        const row = document.createElement('button');
+        row.className = 'never-used-row';
+        row.textContent = p.name;
+        row.title = p.path;
+        row.onclick = () => { closePopover(); startIn(p.path); };
+        popover.appendChild(row);
+      }
+      box.querySelector('.modal-toolbar').appendChild(popover);
+      onDocClick = (ev) => { if (!popover.contains(ev.target) && ev.target !== chip) closePopover(); };
+      document.addEventListener('click', onDocClick);
     };
     const startIn = (cwd) => { ws.send(JSON.stringify({ type: 'create', cwd })); close(); };
     box.querySelector('.temp-btn').onclick = () => { ws.send(JSON.stringify({ type: 'create-temp' })); close(); };

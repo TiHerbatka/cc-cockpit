@@ -160,7 +160,11 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .proj-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj-row-time { color: #888; font-size: 11px; flex: 0 0 auto; }
 .modal-search { background: #1e1e1e; border: 1px solid #3c3c3c; color: #ddd; padding: 6px 8px; border-radius: 4px; }
-.modal-toolbar { display: flex; gap: 8px; align-items: stretch; }
+.modal-toolbar { display: flex; gap: 8px; align-items: stretch; position: relative; }
+.never-used-popover { position: absolute; top: calc(100% + 4px); right: 0; z-index: 20; min-width: 200px; max-height: 240px; overflow-y: auto; background: #1f1f1f; border: 1px solid rgba(217, 164, 65, 0.4); border-radius: 6px; padding: 6px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45); }
+.never-used-head { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #d9a441; padding: 2px 4px 6px; }
+.never-used-row { display: block; width: 100%; text-align: left; background: none; border: none; color: #ddd; padding: 5px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.never-used-row:hover { background: rgba(255, 255, 255, 0.06); }
 .modal-toolbar .modal-search { flex: 1; }
 .older-toggle { flex: 0 0 auto; background: #3a3d41; color: #fff; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 12px; white-space: nowrap; }
 .older-toggle:hover { background: #4a4d51; }
