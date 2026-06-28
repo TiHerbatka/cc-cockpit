@@ -307,6 +307,48 @@ test('a session under the temp dir is exposed as temp (project null)', () => {
   assert.strictEqual(reg.get(n.id).temp, false);
 });
 
+// ---- B5: auto-naming "<project> new <N>" for fresh project sessions ----------
+
+test('a fresh session in a project is auto-named "<project> new <N>", incrementing per create', () => {
+  const { reg } = makeRegistry('C:/root');
+  const a = reg.create('C:/root/alpha');
+  assert.strictEqual(reg.get(a.id).label, 'alpha new 1');
+  const b = reg.create('C:/root/alpha');
+  assert.strictEqual(reg.get(b.id).label, 'alpha new 2');
+  const c = reg.create('C:/root/beta');       // a different project counts on its own
+  assert.strictEqual(reg.get(c.id).label, 'beta new 1');
+});
+
+test('auto-naming counts only existing "<project> new <#>"-named sessions (renames/removals ignored)', () => {
+  const { reg } = makeRegistry('C:/root');
+  const a = reg.create('C:/root/alpha');       // alpha new 1
+  reg.create('C:/root/alpha');                 // alpha new 2
+  reg.rename(a.id, 'Custom');                  // a no longer matches the format
+  const c = reg.create('C:/root/alpha');       // max-matching is "alpha new 2" -> 3
+  assert.strictEqual(reg.get(c.id).label, 'alpha new 3');
+  reg.remove(c.id);                            // remaining matching: only "alpha new 2"
+  const d = reg.create('C:/root/alpha');       // max(2) + 1 -> 3 again (gap reused)
+  assert.strictEqual(reg.get(d.id).label, 'alpha new 3');
+});
+
+test('auto-naming escapes regex-special characters in the project name', () => {
+  const { reg } = makeRegistry('C:/root');
+  const a = reg.create('C:/root/v1.0(x)');
+  assert.strictEqual(reg.get(a.id).label, 'v1.0(x) new 1');
+  const b = reg.create('C:/root/v1.0(x)');
+  assert.strictEqual(reg.get(b.id).label, 'v1.0(x) new 2');
+});
+
+test('temp, resume, and outside-root sessions are not auto-named', () => {
+  const { reg } = makeRegistry('C:/root');
+  const t = reg.create('C:/root/_temporary-sessions/2026-01-01 00-00-00');
+  assert.strictEqual(reg.get(t.id).label, '2026-01-01 00-00-00');   // temp keeps basename
+  const r = reg.create('C:/root/alpha', { resumeId: 'abc' });
+  assert.strictEqual(reg.get(r.id).label, 'alpha');                 // resume keeps basename
+  const o = reg.create('C:/elsewhere/proj');
+  assert.strictEqual(reg.get(o.id).label, 'proj');                  // outside the root
+});
+
 test('setAutoTitle updates the label, but a rename (customName) wins', () => {
   const { reg } = makeRegistry('C:/root');
   const t = reg.create('C:/root/_temporary-sessions/x');

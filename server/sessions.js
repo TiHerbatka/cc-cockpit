@@ -10,6 +10,10 @@ const projects = require('./projects');
 const { sdkMessageToRecords } = require('./sdk');
 const { createConversation } = require('./normalize');
 
+// Escape a string for safe interpolation into a RegExp (project names allow
+// chars like . ( ) + that would otherwise be regex metacharacters).
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // Pure mapper: fold the SDK's two usage responses into the compact shape the
 // header chip consumes. `usageResp` is the experimental rolling-window/limits
 // response; `ctxResp` is getContextUsage(). Tolerates null/missing inputs and
@@ -58,7 +62,11 @@ class SessionRegistry extends EventEmitter {
       conversation: createConversation(), // the live render model + delta fold
       pendingInteraction: null, // a blocking interaction (permission/question/plan/elicitation) awaiting the user
       autoTitle: null,     // Claude Code aiTitle (filled in for temp sessions)
-      customName: null,    // user-set display name (rename) — wins over the rest
+      // A fresh project session is auto-named "<project> new <N>" so siblings in
+      // the same project are distinguishable from the start (B5). It lives in the
+      // customName slot — project (non-temp) sessions never receive an aiTitle, so
+      // this never wrongly suppresses one — and is still overridable by a rename.
+      customName: this._autoProjectName(cwd, opts),
       driver,
       working: true,       // a turn is in progress (send..result)
       waiting: false,      // a permission prompt is pending (-> needs-you)
@@ -315,6 +323,30 @@ class SessionRegistry extends EventEmitter {
     const rel = path.relative(this.projectsRoot, cwd);
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
     return rel.split(/[\\/]/)[0];
+  }
+
+  // B5 auto-name for a fresh project session: "<project> new <N>", where N is one
+  // past the highest existing "<project> new <#>" among current sessions (only
+  // labels already in that exact format count; renamed ones drop out). Returns
+  // null — meaning keep the folder-basename default — for temp, resume, and
+  // outside-the-projects-root sessions. Call BEFORE inserting the new session so
+  // it isn't counted against itself.
+  _autoProjectName(cwd, opts = {}) {
+    if (opts.resumeId) return null;
+    if (!this.projectsRoot) return null;
+    if (projects.isTemp(cwd, this.projectsRoot)) return null;
+    const proj = this.projectOf(cwd);
+    if (!proj) return null;
+    const re = new RegExp(`^${escapeRegExp(proj)} new (\\d+)$`);
+    let max = 0;
+    for (const s of this.sessions.values()) {
+      // The auto-name always lives in the customName slot, so count off that
+      // directly — not the displayed label — to avoid a coincidental autoTitle or
+      // folder-basename match (e.g. a temp session) bumping this project's sequence.
+      const m = s.customName ? s.customName.match(re) : null;
+      if (m) { const n = parseInt(m[1], 10); if (n > max) max = n; }
+    }
+    return `${proj} new ${max + 1}`;
   }
 
   _derive(s) {
