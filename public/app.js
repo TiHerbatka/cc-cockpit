@@ -161,18 +161,62 @@ const MODES = [
   ['dontAsk', 'Never prompts; denies anything not pre-approved.'],
   ['auto', 'A model classifier approves or denies each call.'],
 ];
-// Mode chip from the init message's permission mode; usage from the result
-// message's token totals; model from init/setModel. All arrive as {type:'meta'}.
+// The usage chip aggregates segments that arrive across SEPARATE meta messages:
+// per-turn tokens from result.usage, and the rolling-window (5h/7d) + context
+// figures from the registry's usage refresh. Each meta updates only the segment
+// it carries (so a later rate/ctx message never blanks the token segment); the
+// chip re-renders from the whole accumulator. Reset on a focus change (focus()).
+let usageAcc = { tok: null, ctx: null, fiveHour: null, sevenDay: null };
+function resetUsageChip() {
+  usageAcc = { tok: null, ctx: null, fiveHour: null, sevenDay: null };
+  if (usageEl) usageEl.textContent = '';
+}
+const kTok = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
+// Utilization color: <70 green, 70–90 yellow, >=90 red (classes already in CSS).
+const utilClass = (pct) => (pct >= 90 ? 'u-red' : pct >= 70 ? 'u-yellow' : 'u-green');
+function renderUsageChip() {
+  if (!usageEl) return;
+  usageEl.textContent = '';
+  const segs = [];
+  if (usageAcc.tok) {
+    const span = document.createElement('span');
+    span.textContent = `tok ${kTok(usageAcc.tok.in)}↓ ${kTok(usageAcc.tok.out)}↑`;
+    segs.push(span);
+  }
+  if (usageAcc.ctx) {
+    const span = document.createElement('span');
+    span.textContent = `ctx ${Math.round(usageAcc.ctx.pct)}%`;
+    segs.push(span);
+  }
+  const winSeg = (label, w) => {
+    if (!w) return;
+    const span = document.createElement('span');
+    span.className = utilClass(w.pct);
+    span.textContent = `${label} ${Math.round(w.pct)}%`;
+    if (w.resetsAt) span.title = `resets ${new Date(w.resetsAt).toLocaleString()}`;
+    segs.push(span);
+  };
+  winSeg('5h', usageAcc.fiveHour);
+  winSeg('7d', usageAcc.sevenDay);
+  segs.forEach((s, i) => { if (i) usageEl.append(' · '); usageEl.append(s); });
+}
+// Mode chip from the init message's permission mode; tokens from result.usage;
+// rolling-window/context from the usage refresh; model from init/setModel. All
+// arrive as {type:'meta'}; each carries only the fields it updates.
 function renderMeta(meta) {
   if (meta.mode && claudeModeEl) claudeModeEl.textContent = meta.mode;
   if (meta.model && modelSelect) { for (const o of modelSelect.options) o.selected = (meta.model === o.value || meta.model.startsWith(o.value)); }
   if (meta.effort && effortSelect) { for (const o of effortSelect.options) o.selected = (o.value === meta.effort); }
-  if (meta.usage && usageEl) {
+  let chipDirty = false;
+  if (meta.usage) {
     const u = meta.usage;
     const inTok = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
-    const k = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
-    usageEl.textContent = `tok ${k(inTok)}↓ ${k(u.output_tokens || 0)}↑`;
+    usageAcc.tok = { in: inTok, out: u.output_tokens || 0 };
+    chipDirty = true;
   }
+  if ('ctx' in meta) { usageAcc.ctx = meta.ctx; chipDirty = true; }
+  if (meta.rate) { usageAcc.fiveHour = meta.rate.fiveHour || null; usageAcc.sevenDay = meta.rate.sevenDay || null; chipDirty = true; }
+  if (chipDirty) renderUsageChip();
 }
 // Interrupt the running turn.
 if (interruptBtn) interruptBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'interrupt', id: focusedId })); };
@@ -268,6 +312,7 @@ function focus(id) {
   focusedId = id;
   errorEl.textContent = '';
   guiModel = null; // reset until the new session's snapshot arrives
+  resetUsageChip(); // usage segments are per-session; clear the previous one's
   closeInteractionModal(); // clear any stale interaction modal from the previous session
   // attach acknowledges the session (clearing a your-move signal) and triggers a
   // gui-snapshot of its current model.

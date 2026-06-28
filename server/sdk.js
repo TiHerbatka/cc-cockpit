@@ -185,6 +185,18 @@ function createSdkDriver(cwd, id, opts = {}, deps = {}) {
     setModel: (model) => { try { if (q && typeof q.setModel === 'function') return q.setModel(model); } catch { /* ignore */ } },
     // Effort has no dedicated control method; it lives in the flag-settings layer.
     setEffort: (level) => { try { if (q && typeof q.applyFlagSettings === 'function') return q.applyFlagSettings({ effort: level }); } catch { /* ignore */ } },
+    // Usage snapshots for the header chip (read-on-demand control calls, async +
+    // value-returning). Same defensive guard as the control methods above; the
+    // rolling-window method is experimental and the ONLY source for 5h/7d, so a
+    // failure (or its absence) degrades to null rather than throwing.
+    getContextUsage: async () => {
+      try { if (q && typeof q.getContextUsage === 'function') return await q.getContextUsage(); } catch { /* ignore */ }
+      return null;
+    },
+    getUsage: async () => {
+      try { if (q && typeof q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET === 'function') return await q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(); } catch { /* ignore */ }
+      return null;
+    },
     kill: () => { try { ac.abort(); } catch { /* ignore */ } input.close(); },
   };
 }

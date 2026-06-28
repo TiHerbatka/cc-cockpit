@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { SessionRegistry } = require('../server/sessions');
+const { SessionRegistry, mapUsageWindows } = require('../server/sessions');
 
 // A fake SDK driver mirroring server/sdk.js's createSdkDriver shape. The registry
 // registers onMessage/onExit/onError synchronously in create(), so a test drives
@@ -370,4 +370,83 @@ test('remove on an unknown id is a no-op', () => {
   let emitted = 0; reg.on('sessions', () => { emitted += 1; });
   reg.remove('nope');
   assert.strictEqual(emitted, 0);
+});
+
+// ---- mapUsageWindows (pure) -------------------------------------------------
+
+const usageResp = (overrides = {}) => ({
+  rate_limits_available: true,
+  rate_limits: {
+    five_hour: { utilization: 23, resets_at: '2026-06-28T15:00:00Z' },
+    seven_day: { utilization: 41, resets_at: '2026-07-01T00:00:00Z' },
+  },
+  ...overrides,
+});
+const ctxResp = { totalTokens: 36000, maxTokens: 200000, percentage: 18 };
+
+test('mapUsageWindows maps both rolling windows and context when all present', () => {
+  const m = mapUsageWindows(usageResp(), ctxResp);
+  assert.deepStrictEqual(m, {
+    rate: {
+      fiveHour: { pct: 23, resetsAt: '2026-06-28T15:00:00Z' },
+      sevenDay: { pct: 41, resetsAt: '2026-07-01T00:00:00Z' },
+      available: true,
+    },
+    ctx: { pct: 18, used: 36000, max: 200000 },
+  });
+});
+
+test('mapUsageWindows nulls a window that is missing or has null utilization', () => {
+  const m = mapUsageWindows(usageResp({ rate_limits: { five_hour: { utilization: 50, resets_at: 't' }, seven_day: null } }), ctxResp);
+  assert.deepStrictEqual(m.rate.fiveHour, { pct: 50, resetsAt: 't' });
+  assert.strictEqual(m.rate.sevenDay, null);
+  // utilization null -> window degraded to null
+  const m2 = mapUsageWindows(usageResp({ rate_limits: { five_hour: { utilization: null, resets_at: 't' } } }), ctxResp);
+  assert.strictEqual(m2.rate.fiveHour, null);
+  assert.strictEqual(m2.rate.sevenDay, null);
+});
+
+test('mapUsageWindows degrades to nulls when rate_limits_available is false', () => {
+  const m = mapUsageWindows({ rate_limits_available: false, rate_limits: null }, ctxResp);
+  assert.deepStrictEqual(m.rate, { fiveHour: null, sevenDay: null, available: false });
+  assert.deepStrictEqual(m.ctx, { pct: 18, used: 36000, max: 200000 });
+});
+
+test('mapUsageWindows tolerates null/missing inputs (both sources unavailable)', () => {
+  const m = mapUsageWindows(null, null);
+  assert.deepStrictEqual(m, { rate: { fiveHour: null, sevenDay: null, available: false }, ctx: null });
+});
+
+test('mapUsageWindows returns ctx null when the context response lacks a percentage', () => {
+  assert.strictEqual(mapUsageWindows(usageResp(), {}).ctx, null);
+  assert.strictEqual(mapUsageWindows(usageResp(), { totalTokens: 1 }).ctx, null);
+});
+
+test('_refreshUsage calls both driver methods and emits mapped rate/ctx meta on result', async () => {
+  const drivers = [];
+  const reg = new SessionRegistry({
+    spawnDriver: () => {
+      const d = makeFakeDriver();
+      d.getUsage = async () => usageResp();
+      d.getContextUsage = async () => ctxResp;
+      drivers.push(d); return d;
+    },
+    projectsRoot: 'C:/root',
+  });
+  const s = reg.create('C:/proj/a');
+  const metas = [];
+  reg.on('meta', (id, m) => metas.push(m));
+  drivers[0]._msg(result({ input_tokens: 5 }));         // per-turn usage (sync) + kicks the refresh
+  await new Promise((r) => setTimeout(r, 0));            // let the parallel usage promises resolve
+  assert.ok(metas.some((m) => m.usage && m.usage.input_tokens === 5));
+  assert.ok(metas.some((m) => m.rate && m.rate.fiveHour && m.rate.fiveHour.pct === 23 && m.ctx && m.ctx.pct === 18));
+});
+
+test('_refreshUsage is a no-op for a driver without the usage methods (no extra meta)', () => {
+  const { reg, drivers } = makeRegistry();
+  const s = reg.create('C:/proj/a');
+  const metas = [];
+  reg.on('meta', (id, m) => metas.push(m));
+  drivers[0]._msg(init('default'));   // would trigger a refresh, but the fake driver lacks the methods
+  assert.deepStrictEqual(metas, [{ mode: 'default', model: 'm' }]);
 });

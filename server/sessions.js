@@ -10,6 +10,28 @@ const projects = require('./projects');
 const { sdkMessageToRecords } = require('./sdk');
 const { createConversation } = require('./normalize');
 
+// Pure mapper: fold the SDK's two usage responses into the compact shape the
+// header chip consumes. `usageResp` is the experimental rolling-window/limits
+// response; `ctxResp` is getContextUsage(). Tolerates null/missing inputs and
+// rate_limits_available:false — every segment degrades to null rather than
+// throwing, so a chip never breaks on partial data.
+function mapUsageWindows(usageResp, ctxResp) {
+  const win = (w) => (w && typeof w.utilization === 'number'
+    ? { pct: w.utilization, resetsAt: w.resets_at || null }
+    : null);
+  const available = !!(usageResp && usageResp.rate_limits_available);
+  const limits = available && usageResp.rate_limits ? usageResp.rate_limits : null;
+  const rate = {
+    fiveHour: limits ? win(limits.five_hour) : null,
+    sevenDay: limits ? win(limits.seven_day) : null,
+    available,
+  };
+  const ctx = (ctxResp && typeof ctxResp.percentage === 'number')
+    ? { pct: ctxResp.percentage, used: ctxResp.totalTokens || 0, max: ctxResp.maxTokens || 0 }
+    : null;
+  return { rate, ctx };
+}
+
 class SessionRegistry extends EventEmitter {
   constructor({ spawnDriver, projectsRoot = null, loadResumeRecords = () => [] }) {
     super();
@@ -43,6 +65,7 @@ class SessionRegistry extends EventEmitter {
       ended: false,        // a turn has ended (-> your-move when unfocused)
       acknowledged: false, // focused since waiting/ended began
       exited: false,
+      usageInFlight: false, // a usage refresh is running (de-dup guard)
     };
     this.sessions.set(id, session);
     // Resume: seed the model from the on-disk transcript so the reopened session
@@ -68,10 +91,12 @@ class SessionRegistry extends EventEmitter {
       if (msg.permissionMode) meta.mode = msg.permissionMode;
       if (msg.model) meta.model = msg.model;
       if (Object.keys(meta).length) this.emit('meta', id, meta);
+      this._refreshUsage(id); // seed the 5h/7d/ctx chip at session start
       return;
     }
     if (msg.type === 'result') {
       if (msg.usage) this.emit('meta', id, { usage: msg.usage });
+      this._refreshUsage(id); // refresh rolling-window/ctx after each turn
       this.markIdle(id);
       return;
     }
@@ -79,6 +104,28 @@ class SessionRegistry extends EventEmitter {
       const ops = s.conversation.applyRecord(r);
       if (ops.length) this.emit('delta', id, ops);
     }
+  }
+
+  // Fire-and-forget refresh of the rolling-window (5h/7d) + context usage for the
+  // header chip. Both driver calls run in parallel; the mapped result is emitted
+  // as a meta event (already broadcast to clients). A per-session in-flight guard
+  // stops refreshes piling up; all errors are swallowed (the chip degrades to
+  // blank). Drivers without the usage methods (e.g. test fakes) are a no-op.
+  _refreshUsage(id) {
+    const s = this.sessions.get(id);
+    if (!s || s.exited || s.usageInFlight) return;
+    if (!s.driver.getUsage && !s.driver.getContextUsage) return;
+    s.usageInFlight = true;
+    Promise.all([
+      s.driver.getUsage ? s.driver.getUsage() : null,
+      s.driver.getContextUsage ? s.driver.getContextUsage() : null,
+    ]).then(([usageResp, ctxResp]) => {
+      const cur = this.sessions.get(id);
+      if (cur && !cur.exited) this.emit('meta', id, mapUsageWindows(usageResp, ctxResp));
+    }).catch(() => { /* swallow — chip just stays as-is */ }).finally(() => {
+      const cur = this.sessions.get(id);
+      if (cur) cur.usageInFlight = false;
+    });
   }
 
   _onError(id, err) {
@@ -307,4 +354,4 @@ class SessionRegistry extends EventEmitter {
   }
 }
 
-module.exports = { SessionRegistry };
+module.exports = { SessionRegistry, mapUsageWindows };
