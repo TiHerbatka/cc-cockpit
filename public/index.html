@@ -7,9 +7,8 @@
 </head>
 <body>
   <div id="sidebar">
-    <h1>cc-cockpit</h1>
+    <h1><span>cc-cockpit</span><button id="error-toggle" title="GUI errors" aria-label="GUI errors" hidden>⚠ <span id="error-count">0</span></button></h1>
     <div id="error-center">
-      <button id="error-toggle" title="GUI errors" hidden>⚠ <span id="error-count">0</span> error(s)</button>
       <div id="error-panel" hidden>
         <div class="error-panel-head"><span>GUI errors (<span id="error-count2">0</span>)</span><span><button id="error-clear">clear</button> <button id="error-close">✕</button></span></div>
         <ul id="error-list"></ul>

@@ -2,7 +2,7 @@
 html, body { margin: 0; height: 100%; font-family: Segoe UI, sans-serif; }
 body { display: flex; background: #1e1e1e; color: #ddd; }
 #sidebar { width: 360px; flex: 0 0 360px; background: #252526; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-#sidebar h1 { font-size: 14px; margin: 0 0 8px; color: #9cdcfe; }
+#sidebar h1 { font-size: 14px; margin: 0 0 8px; color: #9cdcfe; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 #session-list { list-style: none; margin: 0; padding: 0; flex: 1; overflow-y: auto; }
 #session-list li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; }
 #session-list li:hover { background: #2d2d30; }
@@ -213,10 +213,14 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 /* Error bubble: sits between the header and the session list; only shows when
    there are errors. Clicking it floats the list (fixed) so the sidebar layout
    doesn't shift. */
-#error-center { margin: 4px 0 8px; }
-#error-toggle { width: 100%; text-align: left; background: #e3b341; color: #1e1e1e; border: 1px solid #c89a2e; border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+#error-center { margin: 0; }
+/* Compact pill living in the title row; pulses a glow while there are unread
+   errors (removed once the panel is opened — see app.js's .seen toggle). */
+#error-toggle { flex: 0 0 auto; background: #e3b341; color: #1e1e1e; border: 1px solid #c89a2e; border-radius: 10px; padding: 1px 8px; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; animation: errpulse 1.4s ease-in-out infinite; }
 #error-toggle:hover { background: #edc257; }
+#error-toggle.seen { animation: none; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
 #error-toggle[hidden] { display: none; }
+@keyframes errpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(227,179,65,0.7); } 50% { box-shadow: 0 0 0 5px rgba(227,179,65,0); } }
 #error-panel { position: fixed; left: 12px; top: 52px; z-index: 80; width: min(520px, 70vw); max-height: 70vh; background: #252526; border: 1px solid #5a3a3a; border-radius: 6px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.6); }
 #error-panel[hidden] { display: none; }
 .error-panel-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-bottom: 1px solid #3c3c3c; color: #e2a23b; font-size: 12px; }

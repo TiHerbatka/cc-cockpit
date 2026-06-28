@@ -51,13 +51,15 @@ const errorCenter = (() => {
       listEl2.appendChild(li);
     }
   };
-  if (toggleBtn) toggleBtn.onclick = () => { panel.hidden = !panel.hidden; };
+  if (toggleBtn) toggleBtn.onclick = () => { panel.hidden = !panel.hidden; if (!panel.hidden) toggleBtn.classList.add('seen'); };
   const closeBtn = document.getElementById('error-close'); if (closeBtn) closeBtn.onclick = () => { panel.hidden = true; };
   const clearBtn = document.getElementById('error-clear'); if (clearBtn) clearBtn.onclick = () => { errors.length = 0; render(); };
   return {
     add(message, stack) {
       errors.push({ ts: Date.now(), message: String(message == null ? 'Unknown error' : message), stack: stack || null });
       if (errors.length > 200) errors.shift();
+      // A new error is unread -> re-arm the pulse, unless the panel is already open.
+      if (toggleBtn && (!panel || panel.hidden)) toggleBtn.classList.remove('seen');
       render();
     },
   };
@@ -342,7 +344,8 @@ ws.addEventListener('message', (ev) => {
   } else if (m.type === 'interaction-request' && m.id === focusedId) {
     openInteractionModal(m);
   } else if (m.type === 'error') {
-    errorEl.textContent = m.message;
+    // Server errors (e.g. local-docs/TODO "not found") go to the error center only,
+    // not the bottom-left #error element (B7).
     errorCenter.add('Server: ' + m.message);
   }
 });
