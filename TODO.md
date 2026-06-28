@@ -41,6 +41,7 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 - [ ] A5. Workflow tracking in the session view - surface a session's running multi-agent Workflow progress inside the cockpit GUI, the way the terminal's live workflow-progress view does. Needs brainstorm/design first; to be picked up next session.
   - [ ] A5.1. Cockpit tracks the multi-agent Workflow running inside a session (if technically feasible to observe it from the SDK stream / session state) - detect that a workflow is active and follow its phase and per-agent progress.
   - [ ] A5.2. Session view renders the active workflow live details (phases, running/parallel agents, counts, progress) that the terminal workflow view normally shows - so the user does not have to drop to a terminal to watch it.
+- [ ] A6. Ability for the user to view sub-agents in the session - surface sub-agents (Agent/Task spawns) running inside a session in the cockpit GUI, so the user can see and inspect them without dropping to a terminal.
 
 ## B. Quick wins
 
@@ -65,7 +66,6 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 ## E. Backlog / deferred
 
 - [ ] E1. Persist session rename across server restart/resume (in-memory only today; needs a {ccSessionId: name} map).
-- [ ] E2. Temporary-session cleanup / auto-deletion (temp sessions persist indefinitely).
 - [ ] E3. Electron conversion milestone (browser-first now; Electron as a final additive milestone — its own brainstorm/spec/plan/branch).
 - [ ] E4. Harden Windows path matching: make isTemp / isUnderProjectsRoot / lastActivityByPath / projectOf case-insensitive on win32.
 
