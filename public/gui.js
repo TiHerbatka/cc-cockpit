@@ -128,7 +128,7 @@ function mountGui(container, handlers) {
     + '</div>'
     + '<div class="gui-log"></div>'
     + '<form class="gui-compose">'
-    + '<div class="gui-compose-input" contenteditable="true" data-placeholder="Message this session…  (Enter to send · Shift+Enter for newline)"></div>'
+    + '<div class="gui-compose-input" contenteditable="true" data-placeholder="Message this session…  (Enter to send · Shift/Ctrl+Enter for newline)"></div>'
     + '<button type="submit">Send</button>'
     + '</form>';
   const statusEl = container.querySelector('.gui-status');
@@ -312,8 +312,12 @@ function mountGui(container, handlers) {
   };
   form.addEventListener('submit', (e) => { e.preventDefault(); submit(); });
   editor.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
-    else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); }
+    // Don't treat an IME composition's confirming Enter (isComposing / keyCode 229)
+    // as a submit — that would send the turn mid-composition.
+    if (e.isComposing || e.keyCode === 229) return;
+    // Plain Enter submits; Shift+Enter and Ctrl+Enter both insert a newline (B1).
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) { e.preventDefault(); submit(); }
+    else if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey)) { e.preventDefault(); document.execCommand('insertLineBreak'); }
   });
   editor.addEventListener('paste', (e) => {
     e.preventDefault();
