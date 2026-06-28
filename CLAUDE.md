@@ -40,7 +40,8 @@ A Node server drives each `claude` session through the **Claude Agent SDK**'s `q
 ## Conventions
 
 - Plain Node, **no bundler/build step**. Test runner: built-in `node --test`.
-- Keep files small and single-responsibility. Frequent commits (one per plan step).
+- Keep files small and single-responsibility.
+- **Committing (assistant) — commit per step, no asking:** commit frequently as the normal close-out of a verified step — **one commit per completed plan step / TODO item, directly to `main`**. This is unconditional: **do NOT ask whether to commit.** This project's commit convention **overrides any generic "only commit/push when the user asks" default** — a specific project guideline outranks a generic default (standing user guideline 2026-06-29, after asking-to-commit was flagged as redundant). Feature branches are reserved for large multi-step efforts (e.g. the SDK re-architecture used one); routine incremental work lands straight on `main`. Only pause to ask for genuinely irreversible or off-convention actions — history rewrites, force-push, or a change of branching strategy.
 - Server binds **`127.0.0.1` only**, default port `4477` (override via `PORT` env). The UI is equivalent to shell access — never expose the port to the network.
 - **Restarting the dev server (assistant) — ALWAYS restart after changes, no asking:** after any fix/modification, the assistant restarts the running `npm start` cockpit itself so the user always sees up-to-date results. This is unconditional — **do NOT wait for confirmation even when the main cockpit has live Claude sessions** (restarting kills them, since the server owns each session's SDK child `claude` process; that is accepted by standing user guideline 2026-06-25). A running Node server does not pick up server-side (`server/*.js`) edits otherwise; client (`public/*`) edits only need a browser reload but restarting anyway is fine. Throwaway test instances (other ports) can be restarted freely.
 
