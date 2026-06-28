@@ -32,7 +32,14 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
 };
 
-function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot = projects.projectsRoot(), claudeDir, openInExplorer = defaultOpenInExplorer, openFile = defaultOpenFile } = {}) {
+// Does a session's working directory still exist on disk? A resumed (or, rarely,
+// a freshly-picked) session can point at a folder that was removed since — handing
+// a missing cwd to the SDK makes its child spawn fail with ENOENT, which the SDK
+// then mislabels as a binary/libc launch failure. We catch it ourselves with this
+// pre-flight check so the cockpit can report the real cause. It is injected (not a
+// hard fs call) so the pure server stays testable with synthetic cwds; the default
+// is permissive and the real check is wired in production (server/index.js).
+function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot = projects.projectsRoot(), claudeDir, openInExplorer = defaultOpenInExplorer, openFile = defaultOpenFile, dirExists = () => true } = {}) {
   // On resume, read the prior transcript so the registry can seed the model.
   const loadResumeRecords = (ccSessionId) => {
     try {
@@ -166,12 +173,14 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
       let m;
       try { m = JSON.parse(raw); } catch { return; }
       if (m.type === 'create') {
+        if (!dirExists(m.cwd)) { ws.send(JSON.stringify({ type: 'error', message: `Can't start session — folder no longer exists: ${m.cwd}` })); return; }
         try { registry.create(m.cwd); }
         catch (e) { ws.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); }
       } else if (m.type === 'create-temp') {
         try { const t = projects.createTempSession(projectsRoot); registry.create(t.path); }
         catch (e) { ws.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); }
       } else if (m.type === 'resume') {
+        if (!dirExists(m.cwd)) { ws.send(JSON.stringify({ type: 'error', message: `Can't resume — this session's folder no longer exists: ${m.cwd}` })); return; }
         try { registry.create(m.cwd, { resumeId: m.id }); }
         catch (e) { ws.send(JSON.stringify({ type: 'error', message: String(e && e.message || e) })); }
       } else if (m.type === 'send') {

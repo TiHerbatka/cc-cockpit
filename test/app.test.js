@@ -451,6 +451,60 @@ test('WS resume starts a session and passes resumeId to spawnDriver', async () =
   await new Promise((r) => server.close(r));
 });
 
+test('WS resume with a missing folder reports an error and does not spawn', async () => {
+  const calls = [];
+  const factory = (cwd, id, opts) => {
+    calls.push({ cwd, id, opts });
+    const o = { written: [] };
+    o.onMessage = () => {}; o.onExit = () => {}; o.onError = () => {};
+    o.write = () => {}; o.interrupt = () => {}; o.kill = () => {};
+    return o;
+  };
+  const { server } = createApp({ spawnDriver: factory, dirExists: () => false });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const settled = nextMessage(ws, (m) => m.type === 'error' || (m.type === 'sessions' && m.sessions.length >= 1));
+  ws.send(JSON.stringify({ type: 'resume', id: 'claude-xyz', cwd: 'C:/gone/folder' }));
+  const msg = await settled;
+
+  assert.strictEqual(msg.type, 'error');
+  assert.match(msg.message, /no longer exists/);
+  assert.strictEqual(calls.length, 0);
+
+  ws.close();
+  await new Promise((r) => server.close(r));
+});
+
+test('WS create with a missing folder reports an error and does not spawn', async () => {
+  const calls = [];
+  const factory = (cwd, id, opts) => {
+    calls.push({ cwd, id, opts });
+    const o = { written: [] };
+    o.onMessage = () => {}; o.onExit = () => {}; o.onError = () => {};
+    o.write = () => {}; o.interrupt = () => {}; o.kill = () => {};
+    return o;
+  };
+  const { server } = createApp({ spawnDriver: factory, dirExists: () => false });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const settled = nextMessage(ws, (m) => m.type === 'error' || (m.type === 'sessions' && m.sessions.length >= 1));
+  ws.send(JSON.stringify({ type: 'create', cwd: 'C:/gone/folder' }));
+  const msg = await settled;
+
+  assert.strictEqual(msg.type, 'error');
+  assert.match(msg.message, /no longer exists/);
+  assert.strictEqual(calls.length, 0);
+
+  ws.close();
+  await new Promise((r) => server.close(r));
+});
+
 test('WS create-temp starts a temporary session (temp:true, project null)', async () => {
   const root = tmpRoot();
   const { factory } = fakeDriverFactory();
