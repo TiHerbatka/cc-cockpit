@@ -1,5 +1,6 @@
 // public/compose.js — pure helpers for the rich compose box. Dual export so
-// node --test can require it and the browser gets globals (mirror modeparse.js).
+// node --test can require it and the browser gets globals (same dual-export pattern
+// as the other pure helper modules).
 function quotePath(p) {
   const s = String(p == null ? '' : p);
   return /\s/.test(s) ? '"' + s + '"' : s;

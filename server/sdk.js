@@ -1,6 +1,7 @@
 // server/sdk.js
-// The SDK session driver: the counterpart to server/pty.js for the Agent-SDK
-// substrate. Each cockpit session owns one durable streaming query() (a child
+// The SDK session driver: the Agent-SDK engine substrate for each cockpit session
+// (it replaced the now-removed PTY path). Each cockpit session owns one durable
+// streaming query() (a child
 // claude the SDK spawns and owns over stdio), authenticated on the user's own
 // Claude Code subscription. This module owns: subscription-only env
 // construction, the streaming-input queue, the GUI permission callback (parks a
@@ -36,7 +37,7 @@ function sdkMessageToRecords(msg) {
 }
 
 // Build the child env so the session ALWAYS authenticates on the user's
-// subscription: strip the parent-session markers (as the PTY path does), then
+// subscription: strip the parent-session markers (as the former PTY path did), then
 // also strip the direct-auth / alternate-provider overrides so the child can
 // never fall into an API-key or gateway auth path. The SDK's env option REPLACES
 // (does not merge with) the child env, so callers pass the complete scrubbed env.

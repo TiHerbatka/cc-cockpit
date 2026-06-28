@@ -1,5 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
 const { sdkMessageToRecords, scrubChildEnv, createSdkDriver } = require('../server/sdk');
 
 test('sdkMessageToRecords maps assistant and user messages, ignores the rest', () => {
@@ -163,4 +165,66 @@ test('createSdkDriver builds subscription-only options (scrubbed env, settingSou
   assert.strictEqual(opts.permissionMode, 'default');
   assert.strictEqual(opts.allowDangerouslySkipPermissions, true);
   assert.ok(opts.abortController instanceof AbortController);
+});
+
+// ---- usage wrappers (the C1 5h/7d/context chip path; fake query injected) ----
+
+test('getUsage / getContextUsage call through to the query object and return its value', async () => {
+  const fakeQ = Object.assign((async function* () {})(), {
+    getContextUsage: async () => ({ percentLeft: 42 }),
+    usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: async () => ({ five_hour: { utilization: 0.3 } }),
+  });
+  const d = createSdkDriver('C:/x', 'id', {}, { query: () => fakeQ });
+  assert.deepStrictEqual(await d.getContextUsage(), { percentLeft: 42 });
+  assert.deepStrictEqual(await d.getUsage(), { five_hour: { utilization: 0.3 } });
+});
+
+test('getUsage / getContextUsage degrade to null when the methods throw', async () => {
+  const fakeQ = Object.assign((async function* () {})(), {
+    getContextUsage: async () => { throw new Error('boom'); },
+    usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: async () => { throw new Error('boom'); },
+  });
+  const d = createSdkDriver('C:/x', 'id', {}, { query: () => fakeQ });
+  assert.strictEqual(await d.getContextUsage(), null);
+  assert.strictEqual(await d.getUsage(), null);
+});
+
+test('getUsage / getContextUsage degrade to null when the query object lacks the methods', async () => {
+  const d = createSdkDriver('C:/x', 'id', {}, { query: () => (async function* () {})() });
+  assert.strictEqual(await d.getContextUsage(), null);
+  assert.strictEqual(await d.getUsage(), null);
+});
+
+// ---- contract smoke test against the REAL installed SDK (skips if absent) ----
+// Converts the otherwise-fully-mocked SDK contract into a regression guard: if a
+// dependency bump renames an option/method the driver relies on (e.g. the
+// experimental usage method), this fails loudly instead of the chip silently
+// going blank or a control silently no-opping.
+
+test('smoke: the installed Agent SDK exposes query()', () => {
+  let sdk;
+  try { sdk = require('@anthropic-ai/claude-agent-sdk'); }
+  catch { return; } // SDK (or a peer dep) not installed — nothing to verify here
+  assert.strictEqual(typeof sdk.query, 'function', 'the SDK must export query()');
+});
+
+test('contract: the SDK type surface still declares the methods/options the driver depends on', () => {
+  let entry;
+  try { entry = require.resolve('@anthropic-ai/claude-agent-sdk'); }
+  catch { return; } // SDK not installed — skip rather than fail
+  let dts = '';
+  try {
+    const dir = path.dirname(entry);
+    for (const f of fs.readdirSync(dir)) {
+      if (f.endsWith('.d.ts')) dts += fs.readFileSync(path.join(dir, f), 'utf8');
+    }
+  } catch { return; } // can't read the shipped types — skip
+  if (!dts) return;
+  for (const name of [
+    'setPermissionMode', 'setModel', 'applyFlagSettings', 'getContextUsage', 'interrupt',
+    'usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET',
+    'settingSources', 'canUseTool', 'onElicitation', 'allowDangerouslySkipPermissions',
+  ]) {
+    assert.ok(dts.includes(name), `SDK type surface should still declare "${name}" (server/sdk.js depends on it)`);
+  }
 });

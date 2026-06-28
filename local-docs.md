@@ -2,6 +2,8 @@
 
 Working notes and the most important takeaways. Most recent session: 2026-06-27.
 
+> **Update (2026-06-28):** the §2 re-architecture has since shipped on branch `feat/agent-sdk-rearch` — cc-cockpit is now **SDK-only** and the PTY/terminal substrate that §4 describes as current has been **removed entirely** (no fallback). §4 is retained below as the pre-re-arch (PTY-era) snapshot.
+
 ## Session takeaways — 2026-06-27 (commercialization + programmatic re-architecture)
 
 ### 1. Commercialization & ToS (TPC3 — resolved, cleared to develop)
@@ -17,11 +19,11 @@ Working notes and the most important takeaways. Most recent session: 2026-06-27.
 - **Outreach:** A private email asking Anthropic the commercial question head-on is drafted and saved at `docs/outreach/2026-06-27-anthropic-compliance-question-email.md`. Probability of a meaningful reply from a small dev is LOW; asking risks converting tolerated-gray into an on-record denial. User will review and decide whether/how to send.
 - Not legal advice; consult counsel before scaling.
 
-### 2. Re-architecture to programmatic interaction (TPC2 — active)
+### 2. Re-architecture to programmatic interaction (TPC2 — done; shipped on branch `feat/agent-sdk-rearch`)
 
 - **Decision:** Replace PTY screen-driving, project-wide, with **structured headless interaction** driving the user's own official `claude` binary. Driving by scraping the terminal screen is a weak foundation; interact programmatically instead.
 - **Substrate choice (corrected 2026-06-27 — supersedes the compaction-era note):** Drive each session through the **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) `query()` for the core. A prior compacted session mistakenly recorded the raw `claude` CLI in stream-json as the substrate; that is wrong and superseded. The two are not competing options: the SDK spawns and owns a local `claude` subprocess and talks to it over stdio in the same newline-delimited JSON (stream-json) protocol, so the SDK is a programmatic wrapper *over* stream-json, not an alternative to it — we let the SDK speak the protocol instead of hand-rolling the raw CLI. **Auth:** the SDK's bundled `claude` authenticates on the **user's own Claude Code subscription** (verified — `five_hour` subscription rate-limit, success), so the zero-token / subscription-only posture holds. **Env control:** the SDK's `env` option *replaces* the child env (it does not merge with `process.env`), so we pass the complete scrubbed env (`scrubParentClaudeEnv({ ...process.env })`) through it — identical scrub logic to the PTY path, just enforced at the SDK option instead of at our own `child_process`/PTY handle; omitting `env` reintroduces the leaked parent markers (the no-transcript bug) and a minimal `env` breaks the spawn (lost `PATH`/`USERPROFILE`).
-- **Plan / sequencing:** Once TPC2 work begins in earnest — first **archive the current PTY implementation to a separate branch** (so we can return / pull from it), then restructure. **PTY is demoted to a fallback only** (used if the GUI path fails); in the target architecture the GUI no longer interacts with the PTY.
+- **Plan / sequencing (as executed):** the old PTY implementation was archived to a separate branch, then the code was restructured. **The PTY substrate was ultimately removed entirely** — cc-cockpit is SDK-only with no fallback; the GUI renders solely from the SDK message stream.
 - **Hard constraint:** one durable streaming session per cockpit session.
 - **Open design decisions (next):** (1) confirm the stream-json control protocol shapes (send prompt, answer permission, interrupt) via a spike; (2) what the GUI renders when PTY is no longer primary; (3) the incremental migration path; (4) the design spec (this re-architecture has no `docs/` spec yet — brainstorming → spec → plan is the process).
 
@@ -30,7 +32,7 @@ Working notes and the most important takeaways. Most recent session: 2026-06-27.
 - **Env scrub is mandatory when spawning from inside a Claude Code session.** The parent leaks `CLAUDECODE`, `CLAUDE_CODE_*` (incl. `CLAUDE_CODE_CHILD_SESSION`), `AI_AGENT`, `CLAUDE_EFFORT`. cc-cockpit's `scrubParentClaudeEnv` strips exactly these; without it the spawned `claude` behaves like a nested child session (the earlier no-transcript bug).
 - **Output protocol shapes (captured):** stream-json output emits newline-delimited JSON — `system/init` (carries `cwd`, `session_id`, `tools`, `model`, `permissionMode`), `assistant` (content array), `rate_limit_event`, and a terminal `result` (`subtype`, `is_error`, `result`, `usage`, `total_cost_usd`). SessionStart hooks also surface as `system/hook_started` + `system/hook_response`.
 
-### 4. Current architecture map (what TPC2 changes)
+### 4. Pre-re-arch architecture map (the PTY-era state TPC2 replaced — historical)
 
 - **cc-cockpit is already half-structured, not a pure screen-scraper.** In GUI mode, OUTPUT is structured: it tails the session's `~/.claude/projects/*/<id>.jsonl` transcript (250 ms poll) and runs it through `server/normalize.js` into typed items (`user`/`assistant`/`thinking`/`tool`/`todos`). The GUI renders from that model, not from terminal bytes.
 - **What is still keystroke- or screen-derived (the real target of TPC2):** submit (`text + "\r"` into the PTY + a 3× bare-Enter "nudge" timer fighting a TUI race); permission answers (digit keystrokes `1`/`2`/`3` to the PTY); interrupt/mode (`\x1b`, `\x1b[Z`); the mode + usage chips (`readFooter()` scrapes xterm's cell grid + regex in `modeparse.js`/`usageparse.js`); and the output transport itself (a disk poll, not a live stream).
