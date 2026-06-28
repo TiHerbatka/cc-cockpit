@@ -38,6 +38,9 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 - [ ] A4. [priority - LAST in this list] Slash-commands / skills + in-TUI pickers in the GUI - do after A2-A3; reshaped by G1 (some pickers become SDK control ops: /model -> setModel, interrupt via abortController, permission-mode via setPermissionMode).
   - [ ] A4.1. Slash-command + skill autocomplete in the compose box — typing `/` shows a filterable menu; selecting inserts it; plus an `@` file-mention picker. GUI-native autocomplete (the compose owns the input).
   - [ ] A4.2. In-TUI pickers surfaced from the GUI. Delivered as native controls: model switch (/model), effort selector (/effort) and the permission-mode dropdown (all 6 modes). Remaining: /diff, /context, /usage, /compact, rewind (Esc-Esc), /theme, /config, plus the extended-thinking and fast toggles - detect + render (or surface + answer) rather than dropping to a terminal.
+- [ ] A5. Workflow tracking in the session view - surface a session's running multi-agent Workflow progress inside the cockpit GUI, the way the terminal's live workflow-progress view does. Needs brainstorm/design first; to be picked up next session.
+  - [ ] A5.1. Cockpit tracks the multi-agent Workflow running inside a session (if technically feasible to observe it from the SDK stream / session state) - detect that a workflow is active and follow its phase and per-agent progress.
+  - [ ] A5.2. Session view renders the active workflow live details (phases, running/parallel agents, counts, progress) that the terminal workflow view normally shows - so the user does not have to drop to a terminal to watch it.
 
 ## B. Quick wins
 
@@ -52,7 +55,7 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 
 ## C. Verify (not build tasks)
 
-- [ ] C1. [VERIFY/BUILD] Usage chip - per-turn tokens now come from the SDK stream (result.usage) and footer-scrape is gone. STILL TO BUILD: the ctx / 5h / 7d rolling-window figures from rate_limit_event are not handled (server never reads rate_limit_event), so the 5h/7d part of the chip is empty. Implement rate_limit_event handling, then verify the chip stays fresh.
+- [ ] C1. [VERIFY/BUILD] 5h / 7d / context usage in the header chip - DESIGN SETTLED 2026-06-28, ready to build next session. Today the chip shows only per-turn tokens; add (a) 5h + 7d rolling-window utilization + reset time and (b) context-window percent. Sources (web-verified): BOTH rolling windows come ONLY from the experimental SDK usage method - no stable alternative exists (Anthropic issue 50518 closed not-planned) - so use it feature-detected + wrapped so it degrades to blank if it ever breaks; context percent from the stable getContextUsage(); per-turn tokens unchanged. Flow: driver gains usage + context-usage wrappers; registry refreshes on session init and on each result message, maps to a compact shape, emits it as a meta event (already broadcast to the client); client accumulates the segments and re-renders the chip, colored by utilization with reset time in a tooltip; any unavailable segment is omitted. No periodic timer. Unit-test the pure mapper; browser-verify. Spec + plan still to write (brainstorm gate already passed).
 
 ## D. Eventually
 
@@ -68,7 +71,7 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 
 ## F. Done (history)
 
-- [x] F1. B2 no-transcript bug — root cause = inherited `CLAUDE_CODE_CHILD_SESSION=1`; fix = `scrubParentClaudeEnv` in `server/pty.js`. (Full writeup: `docs/superpowers/worklog/2026-06-25-b2-no-transcript-rootcause.md`.)
+- [x] F1. B2 no-transcript bug - root cause = inherited `CLAUDE_CODE_CHILD_SESSION=1`; fix = `scrubParentClaudeEnv` (originally in `server/pty.js`; relocated to `server/sdk.js` when the PTY substrate was removed). Full writeup: docs/superpowers/worklog/2026-06-25-b2-no-transcript-rootcause.md
 
 ## G. Re-architecture: PTY-driving -> Claude Agent SDK [TOP PRIORITY]
 - [x] G1. Re-founded cockpit interaction on the Claude Agent SDK (query() driving the user's own subscription-auth claude; verified 2026-06-27). PTY/terminal substrate removed entirely - cc-cockpit is SDK-only, no PTY fallback (spec docs/superpowers/specs/2026-06-27-sdk-engine-rearchitecture-design.md). Reshaped A2, A4 and C1. The only remaining gap, 5h/7d usage windows from rate_limit_event, is tracked in C1.
@@ -77,3 +80,4 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
   - [x] G1.3. Brainstorm -> write the design spec (docs/superpowers/specs/) + implementation plan; decide what the GUI renders when PTY is no longer primary, and the terminal-fallback behavior.
   - [x] G1.4. Swap session spawn from node-pty to the Agent SDK query() (it spawns and owns the child claude over stdio); preserve subscription-only auth and enforce scrubParentClaudeEnv via the SDK env option (which REPLACES, not merges, the child env); keep PTY spawn as the fallback path.
   - [x] G1.5. Structured output + input + control channel via the SDK - delivered: live SDK message stream (server/normalize.js fold via createConversation) replaced the transcript-tail poll; structured streamInput replaced text+CR typing + the 3x bare-Enter nudge timer; SDK control answers tool-permissions / AskUserQuestion / plan-accept (canUseTool) and powers A2; mode + per-turn usage chips re-sourced from the SDK stream (result.usage), footer screen-scrape removed; interrupt (abortController) + permission-mode (setPermissionMode) + model switching via SDK control; RingBuffer raw-byte replay + peek terminal replay retired (no fallback). NOT YET: 5h/7d usage windows from rate_limit_event - see C1.
+- [x] G2. Commit the residue cleanup done 2026-06-28 (currently uncommitted): removed the dead #terminal CSS rule, fixed three stale terminal-returns-later comments (styles.css, app.js, sessions.js), and fixed the TODO F1 doc-ref from server/pty.js to server/sdk.js. Cosmetic only (comments + dead CSS) so no behavior changed - just needs a commit (and a dev-server restart per the always-restart convention, though nothing visible changed).

@@ -125,8 +125,8 @@ function detachGui() {
   gui.clear();
 }
 
-// SDK sessions are GUI-only this phase (raw terminal returns as a deliberate
-// option later). Always mount the GUI pane and attach its live stream.
+// SDK sessions are GUI-only (the terminal substrate was removed - no fallback).
+// Always mount the GUI pane and attach its live stream.
 function applyMode(id) {
   if (id !== focusedId) return;
   guiPaneEl.hidden = false;

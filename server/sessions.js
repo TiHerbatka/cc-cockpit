@@ -30,7 +30,7 @@ class SessionRegistry extends EventEmitter {
     const session = {
       id, cwd, label,
       ccSessionId,
-      mode: 'gui',         // always GUI this phase (terminal returns as an option later)
+      mode: 'gui',         // always GUI (the terminal substrate was removed - no fallback)
       topics: [],          // assistant's per-session topic tracker (from ~/.claude/topics)
       status: 'working',
       conversation: createConversation(), // the live render model + delta fold
