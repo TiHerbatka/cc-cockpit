@@ -1,5 +1,7 @@
 # cc-cockpit — Reference (current state)
 
+> ⚠️ **LEGACY — pre-migration (superpowers-era) index. NOT the authority.** The documentation system and its conventions now live in [`../README.md`](../README.md); follow that. The content files here (`features.md`, `mechanisms.md`, `options.md`) are still the **live content** until TODO A9 moves them into `docs/`, but the rules stated in *this* file ("single source of truth", "update its entry here", the three-handle scheme without `GUI-`) are **superseded**. Do not adopt this scheme.
+
 This is the single source of truth for how cc-cockpit works **right now**: its features, mechanisms, and options/parameters. Read it instead of inferring current behavior from the code or from git history.
 
 ## How to use
