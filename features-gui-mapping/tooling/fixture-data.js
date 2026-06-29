@@ -109,9 +109,18 @@ const ELICITATION_INTERACTION = {
 // ---- the canned session roster ------------------------------------------------
 // Order matters: the client auto-focuses the FIRST session, so the rich
 // conversation is created first (it becomes the focused, idle main view).
+// Canned topics for the focused session (covers all three topic statuses, so the
+// Topics panel shows the active/parked/resolved dots). The launcher writes these
+// to <claudeDir>/topics/<ccSessionId>.json so the topic poll keeps them.
+const MAIN_TOPICS = [
+  { code: 'TPC1', name: 'Dark-mode toggle', status: 'active', summary: 'Add and persist a dark-mode setting in the settings panel.' },
+  { code: 'TPC2', name: 'Settings persistence', status: 'parked', summary: 'Audit that every setting survives a reload.' },
+  { code: 'TPC3', name: 'Flaky test triage', status: 'resolved', summary: 'Stabilise the transcript timestamp test.' },
+];
+
 const SESSIONS = [
   // Project "alpha"
-  { cwd: p('alpha'), script: RICH_CONVERSATION },                                   // focused -> idle, full conversation
+  { cwd: p('alpha'), script: RICH_CONVERSATION, topics: MAIN_TOPICS },              // focused -> idle, full conversation
   { cwd: p('alpha'), script: WORKING_TURN },                                        // working dot
   // Project "beta"
   { cwd: p('beta'), script: FINISHED_TURN },                                        // your-move dot
@@ -179,4 +188,17 @@ function makeFixtureDriver(cwd, id, opts = {}) {
   };
 }
 
-module.exports = { makeFixtureDriver, SESSIONS, PROJECTS_ROOT };
+// A canned TODO.md (written into the alpha project) so the TODO.MD panel shows
+// sections, done/undone items, and nested depth instead of an empty state.
+const ALPHA_TODO_MD = `# TODO
+
+## A. Settings panel
+- [x] A1. Add the dark-mode toggle markup
+- [ ] A2. Persist the choice to localStorage
+  - [ ] A2.1. Read the saved value on load
+  - [x] A2.2. Write on toggle
+## B. Cleanup
+- [ ] B1. Remove the legacy theme switch
+`;
+
+module.exports = { makeFixtureDriver, SESSIONS, PROJECTS_ROOT, ALPHA_TODO_MD };

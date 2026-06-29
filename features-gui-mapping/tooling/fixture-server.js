@@ -12,7 +12,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createApp } = require('../../server/app');
-const { makeFixtureDriver, SESSIONS } = require('./fixture-data');
+const { makeFixtureDriver, SESSIONS, ALPHA_TODO_MD } = require('./fixture-data');
 
 const HOME = path.join(__dirname, 'fixture-home');
 const PROJECTS_ROOT = path.join(HOME, 'projects-root');
@@ -30,6 +30,8 @@ function ensureFixtureHome() {
     fs.mkdirSync(path.join(PROJECTS_ROOT, proj), { recursive: true });
   }
   fs.mkdirSync(path.join(PROJECTS_ROOT, '_temporary-sessions', 'quick-experiment'), { recursive: true });
+  // A canned TODO.md so the focused session's TODO.MD panel renders real content.
+  fs.writeFileSync(path.join(PROJECTS_ROOT, 'alpha', 'TODO.md'), ALPHA_TODO_MD);
 
   const seedDir = path.join(CLAUDE_DIR, 'projects', 'seed');
   fs.mkdirSync(seedDir, { recursive: true });
@@ -72,8 +74,17 @@ const { server, registry } = createApp({
 
 server.listen(PORT, HOST, () => {
   // Seed the canned sessions once the server is up.
+  const topicsDir = path.join(CLAUDE_DIR, 'topics');
+  fs.mkdirSync(topicsDir, { recursive: true });
   for (const s of SESSIONS) {
-    registry.create(s.cwd, { script: s.script, interaction: s.interaction, exit: s.exit, usage: s.usage, ctx: s.ctx });
+    const pub = registry.create(s.cwd, { script: s.script, interaction: s.interaction, exit: s.exit, usage: s.usage, ctx: s.ctx });
+    // The topic poll reads <claudeDir>/topics/<ccSessionId>.json, so write the
+    // canned topics under the id the registry just assigned (and would otherwise
+    // overwrite them with []).
+    if (s.topics) {
+      fs.writeFileSync(path.join(topicsDir, `${pub.ccSessionId}.json`),
+        JSON.stringify({ session_id: pub.ccSessionId, topics: s.topics }, null, 2));
+    }
   }
   console.log(`gui-map fixture listening on http://${HOST}:${PORT} (${SESSIONS.length} canned sessions)`);
 });
