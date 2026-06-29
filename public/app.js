@@ -93,11 +93,20 @@ const gui = mountGui(guiPaneEl, {
   },
 });
 
+// H3: a transient "Waiting for Claude…" spinner covers the gap between sending a
+// turn and Claude's first output of that turn. awaitingResponse gates it; the gui
+// controller owns the DOM (setWaiting). It clears on the first non-user item of the
+// turn, on a focus change, on an interaction prompt, or on a server error.
+let awaitingResponse = false;
+function stopWaiting() { awaitingResponse = false; gui.setWaiting(false); }
+
 // Send a user turn as ONE structured message over the SDK channel — no keystroke
 // emulation, no carriage return, no nudge timer (the old PTY race is gone).
 function composeSend(text) {
   if (!focusedId) return;
   ws.send(JSON.stringify({ type: 'send', id: focusedId, text }));
+  awaitingResponse = true;
+  gui.setWaiting(true);
 }
 
 // The focused session's render model, kept in sync from a gui-snapshot (full) plus
@@ -422,6 +431,7 @@ function removeSession(s) {
 function focus(id) {
   focusedId = id;
   errorEl.textContent = '';
+  stopWaiting(); // the spinner is per-turn on the previous session; reset on switch
   guiModel = null; // reset until the new session's snapshot arrives
   resetUsageChip(); // usage segments are per-session; clear the previous one's
   closeInteractionModal(); // clear any stale interaction modal from the previous session
@@ -444,7 +454,12 @@ ws.addEventListener('message', (ev) => {
     gui.update(guiModel);
     if (floatSource === 'insession') renderFloat();
   } else if (m.type === 'gui-delta') {
-    if (m.id === focusedId && guiModel) { applyDelta(guiModel, m.ops); gui.update(guiModel); if (floatSource === 'insession') renderFloat(); }
+    if (m.id === focusedId && guiModel) {
+      applyDelta(guiModel, m.ops); gui.update(guiModel); if (floatSource === 'insession') renderFloat();
+      // Claude has "started responding" once any non-user item lands this turn
+      // (the user echo is kind 'user' and must NOT dismiss the spinner).
+      if (awaitingResponse && (m.ops || []).some((o) => o.op === 'append' && o.item && o.item.kind !== 'user')) stopWaiting();
+    }
     if (m.id === previewId && previewModel) { applyDelta(previewModel, m.ops); window.renderGuiModel(previewBody, previewModel); }
   } else if (m.type === 'todo-content' && m.id === focusedId) {
     todoMdState = { loading: false, found: m.found, entries: m.entries || [] };
@@ -455,10 +470,12 @@ ws.addEventListener('message', (ev) => {
   } else if (m.type === 'meta' && m.id === focusedId) {
     renderMeta(m);
   } else if (m.type === 'interaction-request' && m.id === focusedId) {
+    stopWaiting(); // a prompt means Claude is now waiting on the user, not "starting"
     openInteractionModal(m);
   } else if (m.type === 'error') {
     // Server errors (e.g. local-docs/TODO "not found") go to the error center only,
     // not the bottom-left #error element (B7).
+    stopWaiting();
     errorCenter.add('Server: ' + m.message);
   }
 });

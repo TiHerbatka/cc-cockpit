@@ -105,12 +105,14 @@ function mountGui(container, handlers) {
     + '<div class="perm-hint">Allow once, allow &amp; remember, or deny this tool.</div>'
     + '</div>'
     + '<div class="gui-log"></div>'
+    + '<div class="gui-waiting" hidden><span class="gui-spinner"></span>Waiting for Claude…</div>'
     + '<form class="gui-compose">'
     + '<div class="gui-compose-input" contenteditable="true" data-placeholder="Message this session…  (Enter to send · Shift/Ctrl+Enter for newline)"></div>'
     + '<button type="submit">Send</button>'
     + '</form>';
   const statusEl = container.querySelector('.gui-status');
   const logEl = container.querySelector('.gui-log');
+  const waitEl = container.querySelector('.gui-waiting');
   const form = container.querySelector('.gui-compose');
   const editor = form.querySelector('.gui-compose-input');
 
@@ -323,8 +325,11 @@ function mountGui(container, handlers) {
 
   return {
     update(model) { renderStatus(statusEl, model); renderLog(logEl, model); },
-    clear() { statusEl.innerHTML = ''; logEl.innerHTML = ''; hidePerm(); },
+    clear() { statusEl.innerHTML = ''; logEl.innerHTML = ''; hidePerm(); waitEl.hidden = true; },
     focusCompose() { editor.focus(); },
+    // Show/hide the "Waiting for Claude…" spinner shown between a send and Claude's
+    // first output of the turn (H3). Driven by app.js's awaitingResponse logic.
+    setWaiting(on) { waitEl.hidden = !on; },
     // Mirror a native permission prompt. The buttons map to Claude's numbered
     // options (1=Allow, 2=Allow+don't-ask, 3=Deny); onAnswer sends the keystroke.
     showPermission(req, onAnswer) {
