@@ -17,12 +17,13 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 
 ### MECH-env-scrub — Parent-env scrub at spawn
 
-**What it does:** Strips the parent Claude Code session's leaked markers from the environment handed to each spawned `claude`, so every cockpit session launches like a fresh top-level session. Delivered through the SDK `env` option, which replaces (not merges) the child environment.
+**What it does:** Builds the child environment so every spawned `claude` launches like a fresh top-level session AND can only authenticate on the user's own subscription. It strips the parent Claude Code session's leaked markers and the direct-auth / alternate-provider overrides, then hands the SDK `env` option the complete scrubbed environment (which replaces, not merges, the child environment).
 
 **Key facts:**
-- Strips `CLAUDECODE`, the `CLAUDE_CODE_*` namespace (incl. `CLAUDE_CODE_CHILD_SESSION`), `CLAUDE_EFFORT`, and `AI_AGENT`.
-- Mandatory: without it a spawned `claude` inherits the child-session marker and writes no transcript (the no-transcript bug).
-- The SDK `env` option replaces the child env, so the cockpit passes the full scrubbed env (`scrubParentClaudeEnv({ ...process.env })`); a minimal env would break the spawn (lost `PATH`/`USERPROFILE`).
+- Strips the parent-session markers: `CLAUDECODE`, the `CLAUDE_CODE_*` namespace (incl. `CLAUDE_CODE_CHILD_SESSION`), `CLAUDE_EFFORT`, and `AI_AGENT`.
+- Also strips the direct-auth / alternate-provider overrides — `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, and `ANTHROPIC_BASE_URL` — so the child can never fall into an API-key or gateway auth path; this is the actual subscription-only auth guard.
+- Mandatory: without the marker strip a spawned `claude` inherits the child-session marker and writes no transcript (the no-transcript bug).
+- The cockpit hands the SDK `env` option the complete scrubbed environment because that option replaces (does not merge with) the child env; a minimal env would instead break the spawn (lost `PATH`/`USERPROFILE`).
 - Role-level location: the session-spawn path.
 
 **Last verified: 2026-06-29**
@@ -39,15 +40,15 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 
 **Last verified: 2026-06-29**
 
-### MECH-session-state — Hook-driven session state
+### MECH-session-state — SDK-stream-driven session state
 
-**What it does:** A session's status is driven by Claude Code turn-boundary hooks rather than guessed from output silence. A submitted turn marks it working, a turn-end marks it idle, and a permission notification marks it needs-you; the distinct your-move state is derived from focus when a turn ends on an unfocused session.
+**What it does:** A session's status is derived from the SDK message stream's turn boundaries, not from external hooks or output-silence guessing. Sending a turn marks it working; the stream's terminal result message marks it idle — or your-move when the session is unfocused at turn end; a gated-tool permission/interaction request marks it needs-you.
 
 **Key facts:**
-- Four turn-boundary hooks are injected via a hooks-only `--settings` file (it merges with, never replaces, the user's settings) and POST `{ id, state }` back to the cockpit: UserPromptSubmit -> working, Stop -> idle, Notification/idle_prompt -> idle, Notification/permission_prompt -> needs-you.
+- Transitions, role-level: sending a turn -> working; the terminal `result` message -> idle (or your-move when the session is unfocused at turn end); a gated-tool permission / interaction request -> needs-you.
 - State derivation precedence: exited; waiting -> needs-you (idle once focused/acknowledged); ended -> your-move (idle once focused); working; else idle.
-- your-move vs idle is derived purely from focus in the registry (no hook/protocol change) — it distinguishes a background turn-end (Claude finished, or asked a prose question) from an active amber permission prompt.
-- Hook-driven turn boundaries eliminate the earlier mid-turn idle flicker that output-silence guessing produced.
+- your-move vs idle is derived purely from focus in the registry — it distinguishes a background turn-end (Claude finished, or asked a prose question) from an active amber permission prompt.
+- No hook settings are injected: there is no `--settings` hooks file and no POST back to the cockpit — turn boundaries come entirely from the SDK message stream, which also removes the mid-turn idle flicker that output-silence guessing produced.
 
 **Last verified: 2026-06-29**
 
@@ -70,7 +71,7 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 **Key facts:**
 - Displayed-label precedence: customName (user rename) > autoTitle (Claude Code aiTitle) > folder basename.
 - Custom name and auto-title are in-memory only — lost on server restart/resume.
-- Owns focus (`focusedId` / acknowledge), the per-session status flags (working / waiting / ended / acknowledged / exited), and a usage-refresh in-flight de-dup guard.
+- Owns the focused-session id and acknowledgement, the per-session status flags (working / waiting / ended / acknowledged / exited), and a usage-refresh in-flight de-dup guard.
 - Project (non-temp) sessions never receive an aiTitle, so they default to a generated project-scoped name held in the customName slot.
 - Emits `delta`, `meta`, `sessions`, `interaction`, and `session-error`.
 
@@ -94,8 +95,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 
 **Key facts:**
 - Projects root defaults to `C:\claude_projects\cockpit`, overridable via `COCKPIT_PROJECTS_ROOT`; one reserved subdir `_temporary-sessions` holds all temporary sessions and is NOT a selectable project.
-- `isTemp(cwd)` is true strictly inside the temp root; `isUnderProjectsRoot(cwd)` is true anywhere under the projects root (used to tag discovery results as cockpit vs. global/other).
-- `lastActivityByPath(paths)` returns each path's most-recent activity time, feeding the project picker's time bands and last-used display.
+- A predicate for strictly-inside-the-temp-root classifies a cwd as a temporary session; a separate predicate for anywhere-under-the-projects-root tags discovery results as cockpit vs. global/other.
+- A per-path last-activity lookup returns each path's most-recent activity time, feeding the project picker's time bands and last-used display.
 - Reserved Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9) are excluded as project names.
 
 **Last verified: 2026-06-29**
