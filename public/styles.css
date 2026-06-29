@@ -87,8 +87,14 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .gui-todos li { padding: 1px 0; color: #bbb; }
 .gui-todos li.todo-completed { color: #5a7d5a; }
 .gui-todos li.todo-in_progress { color: #d0d033; }
-.gui-todos-panel, .gui-topics-panel { flex: 0 0 auto; margin: 6px 12px 0; border: 1px solid #2f2f33; border-radius: 6px; background: #232326; }
-.panel-head { cursor: pointer; padding: 5px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #9cdcfe; user-select: none; }
+/* The panel header stays in flow; its expanded body (B3) floats as an absolute
+   overlay anchored to the panel, so opening a panel never resizes .gui-log. */
+.gui-todos-panel, .gui-topics-panel { position: relative; flex: 0 0 auto; margin: 6px 12px 0; border: 1px solid #2f2f33; border-radius: 6px; background: #232326; }
+/* z-index keeps every header above every floating body, so a sibling panel's
+   open overlay never swallows the other panel's header click. */
+.panel-head { position: relative; z-index: 30; cursor: pointer; padding: 5px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #9cdcfe; user-select: none; }
+.panel-todos, .panel-topics { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; max-height: 45vh; overflow-y: auto; background: #232326; border: 1px solid #2f2f33; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5); }
+.panel-todos[hidden], .panel-topics[hidden] { display: none; }
 .panel-head:hover { background: #2a2a2e; }
 .panel-caret { display: inline-block; width: 10px; }
 .panel-count { color: #888; }
