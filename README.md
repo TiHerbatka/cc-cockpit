@@ -20,10 +20,7 @@ npm test           # runs the unit/integration tests (137/137)
 npm start          # serves the cockpit at http://127.0.0.1:4477
 ```
 
-The design spec and implementation plan (kept for reference) live in:
-
-- **Design:** [`docs/superpowers/specs/2026-06-16-cc-cockpit-design.md`](docs/superpowers/specs/2026-06-16-cc-cockpit-design.md)
-- **Plan:** [`docs/superpowers/plans/2026-06-16-cc-cockpit-mvp.md`](docs/superpowers/plans/2026-06-16-cc-cockpit-mvp.md)
+Current-state docs (features, mechanisms, options/parameters) live in [`docs/reference/`](docs/reference/). The original design spec and implementation plan have been removed from the tree; they remain in git history.
 
 ## Requirements
 

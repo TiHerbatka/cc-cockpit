@@ -10,11 +10,11 @@ The project is being re-founded on the **Claude Agent SDK** (`@anthropic-ai/clau
 - **Env scrub stays mandatory, enforced through the SDK's `env` option** (which *replaces* the child environment, not merges it): the cockpit hands it the complete, already-scrubbed env so the parent session's leaked markers can't reach the child (the no-transcript bug) and the child can only authenticate on the user's own subscription. The exact stripped variables and rationale live in MECH-env-scrub / OPT-env-scrub-list.
 ## Status
 
-Current state — features, mechanisms, options/parameters — lives in [`docs/reference/`](docs/reference/). Read it rather than inferring from `docs/superpowers/` (historical design records).
+Current state — features, mechanisms, options/parameters — lives in [`docs/reference/`](docs/reference/). Read it rather than inferring current behavior from the code or git history.
 
 ## How to resume (in a fresh session opened here)
 
-cc-cockpit is built and runs on the Claude Agent SDK. To run it: `npm install` (first time only) then `npm start`, and open `http://127.0.0.1:4477`. To extend it, the backlog lives in `TODO.md` (managed by the `/todo` skill); the current-state reference (features, mechanisms, options/parameters) lives in `docs/reference/`, while the design specs and implementation plans in `docs/superpowers/` are historical design records — why each feature was built, not how it works now.
+cc-cockpit is built and runs on the Claude Agent SDK. To run it: `npm install` (first time only) then `npm start`, and open `http://127.0.0.1:4477`. To extend it, the backlog lives in `TODO.md` (managed by the `/todo` skill); the current-state reference (features, mechanisms, options/parameters) lives in `docs/reference/`.
 
 ## Common commands
 

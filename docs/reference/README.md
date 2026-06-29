@@ -1,6 +1,6 @@
 # cc-cockpit — Reference (current state)
 
-This is the single source of truth for how cc-cockpit works **right now**: its features, mechanisms, and options/parameters. Read it instead of inferring current behavior from `../superpowers/` (historical design records) or from git history.
+This is the single source of truth for how cc-cockpit works **right now**: its features, mechanisms, and options/parameters. Read it instead of inferring current behavior from the code or from git history.
 
 ## How to use
 - **Features** — what you can do: [features.md](./features.md)

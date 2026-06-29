@@ -1,6 +1,6 @@
 # cc-cockpit — Local docs (scratch / working notes)
 
-This is the throwaway working-notes file for the current session — quick scratch, not a reference. Load-bearing facts no longer live here: current-state features, mechanisms, and options/parameters are in [`docs/reference/`](docs/reference/) (read that, not this), and the historical design records are under `docs/superpowers/`.
+This is the throwaway working-notes file for the current session — quick scratch, not a reference. Load-bearing facts no longer live here: current-state features, mechanisms, and options/parameters are in [`docs/reference/`](docs/reference/) (read that, not this).
 
 ## Decision breadcrumbs
 
