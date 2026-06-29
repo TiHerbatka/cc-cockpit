@@ -83,3 +83,15 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
   - [x] G1.4. Swap session spawn from node-pty to the Agent SDK query() (it spawns and owns the child claude over stdio); preserve subscription-only auth and enforce scrubParentClaudeEnv via the SDK env option (which REPLACES, not merges, the child env); keep PTY spawn as the fallback path.
   - [x] G1.5. Structured output + input + control channel via the SDK - delivered: live SDK message stream (server/normalize.js fold via createConversation) replaced the transcript-tail poll; structured streamInput replaced text+CR typing + the 3x bare-Enter nudge timer; SDK control answers tool-permissions / AskUserQuestion / plan-accept (canUseTool) and powers A2; mode + per-turn usage chips re-sourced from the SDK stream (result.usage), footer screen-scrape removed; interrupt (abortController) + permission-mode (setPermissionMode) + model switching via SDK control; RingBuffer raw-byte replay + peek terminal replay retired (no fallback). NOT YET: 5h/7d usage windows from rate_limit_event - see C1.
 - [x] G2. Commit the residue cleanup done 2026-06-28 (currently uncommitted): removed the dead #terminal CSS rule, fixed three stale terminal-returns-later comments (styles.css, app.js, sessions.js), and fixed the TODO F1 doc-ref from server/pty.js to server/sdk.js. Cosmetic only (comments + dead CSS) so no behavior changed - just needs a commit (and a dev-server restart per the always-restart convention, though nothing visible changed).
+
+## H. GUI polish and formatting
+- [ ] H1. Floating header panels (In-session todo / Topics / TODO.MD) should match the session chat-area width, not a fixed narrow width.
+  - [ ] H1.1. Topics floating list should show each topic's code, name AND summary, formatted for readability.
+  - [ ] H1.2. Floating-panel font size can match the chat font size.
+- [ ] H2. Make the session status icon bigger - at the current size you cannot tell which state it depicts without zooming in.
+- [ ] H3. After the user sends a prompt, show a small spinner / waiting-for-Claude indicator until Claude starts responding.
+- [ ] H4. Improve usage-stats visibility - it looks cluttered among the header buttons; consider moving the usage chip to its own row.
+- [ ] H5. Collapse long pasted user text (beyond a character/line threshold) into a compact placeholder like the Claude terminal, with click to expand/collapse.
+- [ ] H6. Verify and, if needed, add file-path wrapping in the compose editor and in chat (revisit what image paste/drag introduced). Also detect quoted paths on paste - Windows auto-quotes copied file paths - and handle/strip the quotes.
+- [ ] H7. User message bubbles should use the same width as Claude messages, not a narrower width that wastes vertical space through extra wrapping.
+- [ ] H8. Render Claude output formatting in the GUI (markdown: code blocks, lists, emphasis, etc.). Research what formatting Claude emits in the terminal and support it.
