@@ -42,6 +42,7 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
   - [ ] A5.1. Cockpit tracks the multi-agent Workflow running inside a session (if technically feasible to observe it from the SDK stream / session state) - detect that a workflow is active and follow its phase and per-agent progress.
   - [ ] A5.2. Session view renders the active workflow live details (phases, running/parallel agents, counts, progress) that the terminal workflow view normally shows - so the user does not have to drop to a terminal to watch it.
 - [ ] A6. Ability for the user to view sub-agents in the session - surface sub-agents (Agent/Task spawns) running inside a session in the cockpit GUI, so the user can see and inspect them without dropping to a terminal.
+- [ ] A7. Collapse runs of consecutive tool-use cards in the conversation: when more than 2 tool uses occur back-to-back, group them into a single collapsed entry; the user unfolds the group to reveal the individual tool cards, each still individually expandable/clickable exactly as today.
 
 ## B. Quick wins
 
