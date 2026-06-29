@@ -68,6 +68,7 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 - [ ] E1. Persist session rename across server restart/resume (in-memory only today; needs a {ccSessionId: name} map).
 - [ ] E3. Electron conversion milestone (browser-first now; Electron as a final additive milestone — its own brainstorm/spec/plan/branch).
 - [ ] E4. Harden Windows path matching: make isTemp / isUnderProjectsRoot / lastActivityByPath / projectOf case-insensitive on win32.
+- [ ] E5. Binary strategy and setup-time choice. DECIDED 2026-06-29: cc-cockpit uses the SDK-bundled claude binary (rationale in local-docs.md, section 7). POSSIBLE FEATURE: a one-time setup decision letting the user pick the SDK-bundled binary [default: guaranteed-compatible, may lag, needs an update path] vs their own installed standalone claude [always-latest single-source, but accepts version-divergence risk]. Also required for the bundled path so it does not stall: a test-gated SDK-dependency update path - a startup check for a newer @anthropic-ai/claude-agent-sdk plus one-click update-and-restart. Interacts with E3: Electron packaging needs the bundled binary asar-unpacked; the standalone opt-in would sidestep that.
 
 ## F. Done (history)
 

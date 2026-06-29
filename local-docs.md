@@ -1,6 +1,6 @@
 # cc-cockpit — Local docs
 
-Working notes and the most important takeaways. Most recent session: 2026-06-27.
+Working notes and the most important takeaways. Most recent session: 2026-06-29.
 
 > **Update (2026-06-28):** the §2 re-architecture has since shipped on branch `feat/agent-sdk-rearch` — cc-cockpit is now **SDK-only** and the PTY/terminal substrate that §4 describes as current has been **removed entirely** (no fallback). §4 is retained below as the pre-re-arch (PTY-era) snapshot.
 
@@ -48,3 +48,15 @@ Working notes and the most important takeaways. Most recent session: 2026-06-27.
 ### 6. Other
 
 - **A1.7 done:** image-token drag-to-reposition in the GUI compose box is implemented, committed (`44037c1`), 130 tests pass.
+
+## Session takeaways — 2026-06-29 (claude binary version strategy)
+
+### 7. Which `claude` runs sessions — stick with the SDK-bundled binary (decision)
+
+- **Decision:** cc-cockpit keeps using the **SDK-bundled `claude` binary** — the default; `pathToClaudeCodeExecutable` stays unset. It does NOT use the user's separately-installed standalone Claude Code CLI.
+- **Why bundled is the safe bind:** the binary ships as a per-platform optional dependency **exact-version-pinned** to `@anthropic-ai/claude-agent-sdk` (no caret/tilde — verified: SDK `0.3.195` → `@anthropic-ai/claude-agent-sdk-win32-x64` `0.3.195` → `claude.exe` `2.1.195`). SDK and its binary therefore move as one atomic unit and **cannot diverge** — the binary is guaranteed to speak the stdio/stream-json control protocol the installed SDK expects. This is the only structurally-guaranteed-compatible pairing.
+- **The gap we accept:** the bundled binary is **inert** — no background self-updater. Its version equals the installed `@anthropic-ai/claude-agent-sdk` version, full stop. So it can **lag** the user's standalone `claude` (which auto-updates continuously) and **stalls** entirely if the SDK dependency is never bumped.
+- **What the gap does and does NOT mean:** model intelligence/accuracy is **server-side** and identical across CLI builds (both call the same Claude models on the user's subscription). A lag means missing recent **client features / fixes / harness improvements** — and occasionally access to a **brand-new model gated on a CLI update** — NOT a less capable Claude.
+- **Required practice so it doesn't stall:** keeping current is the cockpit's job — bump `@anthropic-ai/claude-agent-sdk` and reinstall, **test-gated** (the pre-1.0 SDK JS API can change between releases, so each bump must be validated against the cockpit's own `query()` usage). Fold into the cockpit's normal update cadence; intended mechanism is a startup "newer SDK available" check + one-click update-and-restart.
+- **Rejected as default, kept as a possible opt-in:** pointing `pathToClaudeCodeExecutable` at the user's standalone `claude` gives single-source / always-latest, but forfeits the compatibility guarantee — SDK and the standalone CLI are **independent publish streams** that can diverge, surfacing as silent protocol breakage (crash on an unknown flag, a hung query on an unanswered control request, or silently degraded permission/hook/MCP features) with **no** clean version-aware error. Recorded as a possible setup-time opt-in (TODO E5), not the default.
+- **Electron (E3) interaction:** the session-running binary lives inside the app's own `node_modules`, so packaging must keep it launchable (`asarUnpack` the binary + point `pathToClaudeCodeExecutable` at the unpacked path). The standalone-binary opt-in would sidestep that packaging step but take on the divergence risk.
