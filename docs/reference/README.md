@@ -6,7 +6,7 @@ This is the single source of truth for how cc-cockpit works **right now**: its f
 - **Features** — what you can do: [features.md](./features.md)
 - **Mechanisms** — how it works under the hood: [mechanisms.md](./mechanisms.md)
 - **Options / Parameters** — what you can tune: [options.md](./options.md)
-- **GUI glossary & visual map** — a generated map of the GUI surface, planned under [features-gui-mapping/](../../features-gui-mapping/) (produced by the GUI glossary skill; not yet built)
+- **GUI glossary & visual map** — a generated, referenceable map of the GUI surface under [features-gui-mapping/](../../features-gui-mapping/): a [glossary](../../features-gui-mapping/glossary.md) (every area/element keyed by a stable `GUI-<AREA>-<slug>` handle, complementary to the `FEAT-` handles here) and an interactive [map.html](../../features-gui-mapping/map.html) (per-state screenshots with clickable/hoverable hotspots). Regenerate with the `/gui-map` skill (it drives the real GUI via canned dev-only fixture data).
 
 ## Handle scheme
 Every entry is keyed by a stable handle: `FEAT-<slug>`, `MECH-<slug>`, `OPT-<slug>`. Handles are immutable and never reused; cross-reference entries by handle.
