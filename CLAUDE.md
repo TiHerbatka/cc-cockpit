@@ -10,11 +10,11 @@ The project is being re-founded on the **Claude Agent SDK** (`@anthropic-ai/clau
 - **Env scrub stays mandatory, enforced through the SDK's `env` option** (which *replaces* the child environment, not merges it): the cockpit hands it the complete, already-scrubbed env so the parent session's leaked markers can't reach the child (the no-transcript bug) and the child can only authenticate on the user's own subscription. The exact stripped variables and rationale live in MECH-env-scrub / OPT-env-scrub-list.
 ## Status
 
-Current state — features, mechanisms, options/parameters — lives in [`docs/reference/`](docs/reference/). Read it rather than inferring current behavior from the code or git history.
+Current state lives in the documentation: enter via [`local-docs.md`](local-docs.md) (the index) and read the detail in [`docs/`](docs/) — features, mechanisms, options/parameters. Read it rather than inferring current behavior from the code or git history. How the docs are organized and kept fresh: [`docs/README.md`](docs/README.md). (Migration note: the detailed files are being reworked out of the superpowers-era `docs/reference/` into `docs/` — TODO A9.)
 
 ## How to resume (in a fresh session opened here)
 
-cc-cockpit is built and runs on the Claude Agent SDK. To run it: `npm install` (first time only) then `npm start`, and open `http://127.0.0.1:4477`. To extend it, the backlog lives in `TODO.md` (managed by the `/todo` skill); the current-state reference (features, mechanisms, options/parameters) lives in `docs/reference/`.
+cc-cockpit is built and runs on the Claude Agent SDK. To run it: `npm install` (first time only) then `npm start`, and open `http://127.0.0.1:4477`. To extend it, the backlog lives in `TODO.md` (managed by the `/todo` skill); the current-state docs are entered via [`local-docs.md`](local-docs.md) and detailed in [`docs/`](docs/) (see [`docs/README.md`](docs/README.md) for how they're organized; files are mid-migration out of `docs/reference/`).
 
 ## Common commands
 
@@ -28,11 +28,21 @@ A Node server drives each `claude` session through the **Claude Agent SDK**'s `q
 
 Full mechanism reference: `docs/reference/mechanisms.md`.
 
+## Documentation
+
+How the project is documented (full conventions: [`docs/README.md`](docs/README.md)):
+
+- **Two tiers.** [`local-docs.md`](local-docs.md) (repo root) is the **entry point** — general info + an index into `docs/`; it links rather than duplicates. [`docs/`](docs/) holds the **detailed, authoritative** docs, one file per area (`overview`; `features` `FEAT-`; `mechanisms` `MECH-`; `options` `OPT-`; `gui-map` `GUI-`) and is the source of truth for current behavior.
+- **Stable handles.** Entries are keyed by immutable `FEAT-`/`MECH-`/`OPT-`/`GUI-` IDs; cross-reference by handle, never renumber or reuse.
+- **Freshness is convention-enforced (no scripts).** Every file and entry carries a `Last verified: YYYY-MM-DD`. The core upkeep rule: any commit that changes behavior **updates the affected entry and re-stamps its date in the same commit** — docs ride the code and can't silently drift. A stale date relative to recent changes flags an entry to re-verify. "Verify `docs/<file>`" = read the code area, reconcile each entry, re-stamp. Claude does this as a standing duty whenever it works in an area.
+- **Both audiences:** overview-first prose + links for humans; predictable headings, explicit metadata, ISO dates, and handle cross-refs for agents.
+- **Migration in progress:** the detailed files are being reworked from `docs/reference/` into `docs/` (TODO A9); the GUI map wires in as `docs/gui-map.md` with its mechanism files moving into the skill (TODO A10).
+
 ## Conventions
 
 - Plain Node, **no bundler/build step**. Test runner: built-in `node --test`.
 - Keep files small and single-responsibility.
-- **Docs upkeep (convention-only):** when you change/add/remove a feature, mechanism, or option, update its entry in `docs/reference/` in the same commit and stamp its Last-verified date. New entries take the next handle in their category.
+- **Docs upkeep (convention-only):** see the **Documentation** section above. In short — any commit that changes/adds/removes a feature, mechanism, or option updates the affected `docs/` entry and re-stamps its Last-verified date **in the same commit**; new entries take the next handle in their category.
 - **Committing (assistant) — commit per step, no asking:** commit frequently as the normal close-out of a verified step — **one commit per completed plan step / TODO item**. This is unconditional: **do NOT ask whether to commit.** This project's commit convention **overrides any generic "only commit/push when the user asks" default** — a specific project guideline outranks a generic default (standing user guideline 2026-06-29, after asking-to-commit was flagged as redundant). Only pause to ask for genuinely irreversible or off-convention actions — history rewrites, force-push, or a change of branching strategy.
 - **Branching / isolation — driven by parallelism, not change size:** sequential single-threaded work commits **straight to `main`** (the default — no branch). Isolate on a branch only when work needs isolation: (a) several **independent** features developed **concurrently**, or (b) large / risky multi-step work. Then give each feature its **own branch — preferably a git worktree** (a separate checkout so concurrent edits/builds/tests don't collide; the worktree-setup and branch-finishing skills are the playbook), commit per step inside it, and once the feature is verified **merge it straight to `main` — no PR** (solo local repo; standing user guideline 2026-06-29), then drop the worktree. Practical note: running two cockpit instances at once needs distinct ports (set the `PORT` override per worktree), since the default port collides.
 - Server binds **`127.0.0.1` only**, default port `4477` (override via `PORT` env). The UI is equivalent to shell access — never expose the port to the network.

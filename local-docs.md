@@ -1,11 +1,32 @@
-# cc-cockpit — Local docs (scratch / working notes)
+# cc-cockpit — Local docs (entry point)
 
-This is the throwaway working-notes file for the current session — quick scratch, not a reference. Load-bearing facts no longer live here: current-state features, mechanisms, and options/parameters are in [`docs/reference/`](docs/reference/) (read that, not this).
+The front door to this project's documentation: general orientation plus an index into the detailed docs. **Load-bearing detail is not duplicated here** — this file links to the authoritative `docs/` files instead. For *how the documentation works* (conventions, handles, freshness rules), read [`docs/README.md`](docs/README.md).
+
+## What cc-cockpit is
+
+A personal, local web app: a multi-session **Claude Code cockpit** — one window showing all live Claude Code sessions at once, switch instantly, type into any. The unit is a *session*, not a project. Built on the **Claude Agent SDK** (SDK-only; the PTY substrate was removed). Full pitch and operating rules: [`CLAUDE.md`](CLAUDE.md).
+
+Run it: `npm install` (first time) then `npm start`, open `http://127.0.0.1:4477`.
+
+## Documentation index
+
+| You want… | Go to |
+|---|---|
+| How the docs are organized & kept fresh | [`docs/README.md`](docs/README.md) |
+| Architecture & how the pieces fit | `docs/overview.md` _(planned — currently summarized in `CLAUDE.md`; migration TODO A9)_ |
+| User-facing features (`FEAT-`) | `docs/features.md` _(currently [`docs/reference/features.md`](docs/reference/features.md); migration TODO A9)_ |
+| How it works under the hood (`MECH-`) | `docs/mechanisms.md` _(currently [`docs/reference/mechanisms.md`](docs/reference/mechanisms.md); migration TODO A9)_ |
+| Tunables / parameters (`OPT-`) | `docs/options.md` _(currently [`docs/reference/options.md`](docs/reference/options.md); migration TODO A9)_ |
+| GUI glossary & visual map (`GUI-`) | [`features-gui-mapping/glossary.md`](features-gui-mapping/glossary.md) + [`features-gui-mapping/map.html`](features-gui-mapping/map.html) _(to be wired in as `docs/gui-map.md`; TODO A10)_ |
+| The backlog | [`TODO.md`](TODO.md) (managed by the `/todo` skill) |
 
 ## Decision breadcrumbs
 
-- **Commercialization & ToS:** tolerated gray area, cleared to develop — see `docs/reference/mechanisms.md` MECH-zero-token-guardrails.
-- **Re-architecture to the Agent SDK:** done, SDK-only (PTY substrate removed, no fallback) — see `docs/reference/mechanisms.md` MECH-sdk-driver.
+Durable "why" notes that don't belong to a single doc entry. Each points to the authoritative detail.
+
+- **Commercialization & ToS:** tolerated gray area, cleared to develop — see `MECH-zero-token-guardrails` (in `docs/reference/mechanisms.md` until migration).
+- **Re-architecture to the Agent SDK:** done, SDK-only (PTY substrate removed, no fallback) — see `MECH-sdk-driver`.
+- **GUI glossary/mapping skill (I2):** built — a re-runnable `/gui-map` skill drives the real GUI via canned dev-only fixture data to regenerate the glossary + visual map. Artifacts in `features-gui-mapping/`.
 
 ## Active scratch notes
 
