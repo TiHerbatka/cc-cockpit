@@ -72,6 +72,24 @@ const { server, registry } = createApp({
   dirExists: () => true,
 });
 
+// A tiny aux static server (PORT+1) serving the probe + manifest with CORS, so
+// the skill can inject the capture helper into the fixture page with a 3-line
+// bootstrap instead of pasting large blobs. Dev-only, same as everything here.
+const AUX_FILES = {
+  '/probe.js': { file: path.join(__dirname, 'probe.js'), type: 'text/javascript; charset=utf-8' },
+  '/manifest.json': { file: path.join(__dirname, '..', 'manifest.json'), type: 'application/json; charset=utf-8' },
+};
+const aux = require('node:http').createServer((req, res) => {
+  const entry = AUX_FILES[req.url.split('?')[0]];
+  if (!entry) { res.writeHead(404); res.end('not found'); return; }
+  try {
+    const buf = fs.readFileSync(entry.file);
+    res.writeHead(200, { 'content-type': entry.type, 'access-control-allow-origin': '*' });
+    res.end(buf);
+  } catch { res.writeHead(500); res.end('read error'); }
+});
+aux.listen(PORT + 1, HOST);
+
 server.listen(PORT, HOST, () => {
   // Seed the canned sessions once the server is up.
   const topicsDir = path.join(CLAUDE_DIR, 'topics');
@@ -87,4 +105,5 @@ server.listen(PORT, HOST, () => {
     }
   }
   console.log(`gui-map fixture listening on http://${HOST}:${PORT} (${SESSIONS.length} canned sessions)`);
+  console.log(`gui-map aux (probe + manifest, CORS) on http://${HOST}:${PORT + 1}`);
 });

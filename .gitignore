@@ -4,3 +4,5 @@ public/vendor/
 temp/
 # /gui-map skill: the fixture launcher regenerates this canned tree on every run
 features-gui-mapping/tooling/fixture-home/
+# /gui-map skill: intermediate per-run capture rects (glossary.md/map.html are the artifacts)
+features-gui-mapping/captures.json
