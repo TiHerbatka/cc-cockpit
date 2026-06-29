@@ -1,6 +1,8 @@
 # Options / Parameters (current state)
 
-Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). Keep facts here only — do not duplicate them in CLAUDE.md.
+Entries are `OPT-<slug>`. Conventions (format, handles, freshness): see [README.md](./README.md). Keep facts here only — do not duplicate them in CLAUDE.md.
+
+**Last verified: 2026-06-29**
 
 ### OPT-port — Server listen port
 
@@ -9,7 +11,8 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 **Key facts:**
 - `PORT` (env) · default `4477` · effect: the port bound at startup · range: any valid port number; non-numeric/empty falls back to `4477`.
 - Read once at startup; running a second cockpit instance (e.g. a worktree) requires a distinct `PORT` because the default collides.
-- Role-level location: the server bootstrap.
+
+**Area:** the server bootstrap.
 
 **Last verified: 2026-06-29**
 
@@ -20,7 +23,8 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 **Key facts:**
 - host · fixed `127.0.0.1` · effect: loopback only, never exposed to the LAN/network · range: not configurable (hard-coded, no env override).
 - Security posture: the UI is equivalent to shell access, so the bind is intentionally not tunable.
-- Role-level location: the server bootstrap (paired with `OPT-port`).
+
+**Area:** the server bootstrap (paired with `OPT-port`).
 
 **Last verified: 2026-06-29**
 
@@ -38,7 +42,8 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
   - `auto` — a model classifier approves or denies each call.
 - `bypassPermissions` only takes effect because the SDK session is spawned with `allowDangerouslySkipPermissions: true`.
 - Your own loaded settings (`settingSources: ['user', 'project', 'local']`) supply the pre-approved/deny rules these modes apply; tools your settings already allow never reach the gate.
-- Role-level location: the header mode chip → the session control channel (see `MECH-control-channel`).
+
+**Area:** the header mode chip → the session control channel (see `MECH-control-channel`).
 
 **Last verified: 2026-06-29**
 
@@ -50,7 +55,8 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 - model · GUI default is the first option, `claude-opus-4-8` (Opus 4.8) · values: `claude-opus-4-8` (Opus 4.8), `claude-sonnet-4-6` (Sonnet 4.6), `claude-haiku-4-5` (Haiku 4.5).
 - The select re-syncs to the session's actual model when the session reports it (init / model-change meta), so the shown value tracks the live session rather than staying on the GUI default.
 - Changing the select pushes the new model to the live session via the control channel.
-- Role-level location: the header model select → the session control channel.
+
+**Area:** the header model select → the session control channel.
 
 **Last verified: 2026-06-29**
 
@@ -61,7 +67,8 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 **Key facts:**
 - effort · default `high` (the option marked `selected`) · values: `low`, `medium`, `high`, `xhigh`, `max`.
 - Effort has no dedicated SDK control method; the cockpit applies it through the session's flag-settings layer.
-- Role-level location: the header effort select → the session control channel.
+
+**Area:** the header effort select → the session control channel.
 
 **Last verified: 2026-06-29**
 
@@ -73,7 +80,8 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 - Parent-session markers stripped · `CLAUDECODE`, the entire `CLAUDE_CODE_*` namespace (incl. `CLAUDE_CODE_CHILD_SESSION`), `CLAUDE_EFFORT`, `AI_AGENT` · effect: prevents the no-transcript bug (a child that sees the marker writes no transcript).
 - Auth/provider overrides stripped · `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` · effect: the child can never fall into API-key or alternate-gateway auth, preserving the subscription-only posture.
 - The SDK `env` option replaces (does not merge with) the child env, so the cockpit passes the full scrubbed env.
-- See `MECH-env-scrub` for the spawn-path mechanism.
+
+**Area:** the session-spawn env construction (see `MECH-env-scrub`).
 
 **Last verified: 2026-06-29**
 
@@ -84,7 +92,8 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 **Key facts:**
 - `pathToClaudeCodeExecutable` (SDK option) · default: unset · effect: sessions run on the version-pinned `claude` bundled in `@anthropic-ai/claude-agent-sdk`, not the user's separately-installed standalone CLI · range: a filesystem path to an alternate `claude` (not used).
 - Accepted trade-off: the bundled binary is inert (no self-updater), so it can lag the standalone CLI and stalls if the SDK dependency is never bumped.
-- See `MECH-binary-strategy` for the rationale and the version-gap details.
+
+**Area:** the SDK session spawn configuration (see `MECH-binary-strategy`).
 
 **Last verified: 2026-06-29**
 
@@ -95,7 +104,8 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 **Key facts:**
 - `COCKPIT_PROJECTS_ROOT` (env) · default `C:\claude_projects\cockpit` · effect: the root scanned for selectable projects · range: any directory path.
 - Temporary sessions · subfolder `_temporary-sessions` under the projects root · effect: holds each one-off session in its own timestamp-named subfolder; this folder is excluded from the project picker.
-- Role-level location: the projects/discovery layer.
+
+**Area:** the projects/discovery layer.
 
 **Last verified: 2026-06-29**
 
@@ -107,6 +117,8 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 - `CLAUDE_CONFIG_DIR` (env) · default `~/.claude` (the user's home `.claude`) · effect: resolves the base directory whose `projects/*/*.jsonl` transcripts feed resume discovery, aiTitle lookup, and the topics file · range: any directory path.
 - Read uniformly by the transcript tailer, the recent-scan, and the topics reader.
 
+**Area:** the discovery / transcript / topics readers.
+
 **Last verified: 2026-06-29**
 
 ### OPT-playwright-mcp — Project-pinned Playwright MCP output
@@ -116,6 +128,8 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 **Key facts:**
 - `.mcp.json` Playwright server · launched via `npx -y @playwright/mcp@latest` · flag `--output-dir .playwright-mcp` · effect: artifacts written to the repo-relative `.playwright-mcp` folder.
 - Verification tooling only (browser-driven checks), not part of the running cockpit.
+
+**Area:** the project Playwright MCP config (`.mcp.json`).
 
 **Last verified: 2026-06-29**
 
@@ -128,5 +142,7 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 - Topics poll · `1500` ms · effect: re-reads each live session's topics file and pushes it onto the session (feeds the Topics panel / statusline).
 - These are the only two background timers that actually run; both are `unref`'d so they never keep the process alive.
 - The `250` ms is merely the default tick of the incremental transcript tailer helper (`createTailer`), which is NOT instantiated in production: SDK-only means the live conversation comes from the SDK stream, and resume reads the transcript once, synchronously — so no transcript poll runs.
+
+**Area:** the server's background poll timers.
 
 **Last verified: 2026-06-29**

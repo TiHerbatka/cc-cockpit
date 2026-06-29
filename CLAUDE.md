@@ -10,11 +10,11 @@ The project is being re-founded on the **Claude Agent SDK** (`@anthropic-ai/clau
 - **Env scrub stays mandatory, enforced through the SDK's `env` option** (which *replaces* the child environment, not merges it): the cockpit hands it the complete, already-scrubbed env so the parent session's leaked markers can't reach the child (the no-transcript bug) and the child can only authenticate on the user's own subscription. The exact stripped variables and rationale live in MECH-env-scrub / OPT-env-scrub-list.
 ## Status
 
-Current state lives in the documentation: enter via [`local-docs.md`](local-docs.md) (the index) and read the detail in [`docs/`](docs/) — features, mechanisms, options/parameters. Read it rather than inferring current behavior from the code or git history. How the docs are organized and kept fresh: [`docs/README.md`](docs/README.md). (Migration note: the detailed files are being reworked out of the superpowers-era `docs/reference/` into `docs/` — TODO A9.)
+Current state lives in the documentation: enter via [`local-docs.md`](local-docs.md) (the index) and read the detail in [`docs/`](docs/) — features, mechanisms, options/parameters. Read it rather than inferring current behavior from the code or git history. How the docs are organized and kept fresh: [`docs/README.md`](docs/README.md).
 
 ## How to resume (in a fresh session opened here)
 
-cc-cockpit is built and runs on the Claude Agent SDK. To run it: `npm install` (first time only) then `npm start`, and open `http://127.0.0.1:4477`. To extend it, the backlog lives in `TODO.md` (managed by the `/todo` skill); the current-state docs are entered via [`local-docs.md`](local-docs.md) and detailed in [`docs/`](docs/) (see [`docs/README.md`](docs/README.md) for how they're organized; files are mid-migration out of `docs/reference/`).
+cc-cockpit is built and runs on the Claude Agent SDK. To run it: `npm install` (first time only) then `npm start`, and open `http://127.0.0.1:4477`. To extend it, the backlog lives in `TODO.md` (managed by the `/todo` skill); the current-state docs are entered via [`local-docs.md`](local-docs.md) and detailed in [`docs/`](docs/) (see [`docs/README.md`](docs/README.md) for how they're organized).
 
 ## Common commands
 
@@ -34,7 +34,7 @@ Full mechanism reference: the `MECH-` entries in `docs/` (enter via [`local-docs
 
 `local-docs.md` is this project's **structured documentation front door, not a scratch file** — do not blank, overwrite, or junk-append it. The global "local docs" convention (recreate-if-absent / catch-all scratch target) is **overridden here**; transient notes go only in its *Active scratch notes* section.
 
-Migration in progress: detailed files are moving out of `docs/reference/` into `docs/` (A9); the GUI map wires in as `docs/gui-map.md` (A10).
+Migration: the GUI glossary + map (`features-gui-mapping/`) will wire in as `docs/gui-map.md`, with its mechanism files moving into `.claude/skills/gui-map/` (A10).
 
 ## Conventions
 

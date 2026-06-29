@@ -2,7 +2,7 @@
 
 A personal, local web app for working with **multiple live Claude Code sessions in one place** — all sessions visible in a sidebar, instant switching, and a structured GUI for the focused session. Session-centric (not project-centric, not a task board).
 
-> Status: built and runnable now with `npm start`. cc-cockpit drives each session through the Claude Agent SDK (SDK-only). Design specs and implementation plans are kept in `docs/` for reference.
+> Status: built and runnable now with `npm start`. cc-cockpit drives each session through the Claude Agent SDK (SDK-only). Current-state documentation lives in `docs/` (enter via `local-docs.md`).
 
 ## Why
 
@@ -20,7 +20,7 @@ npm test           # runs the unit/integration tests (137/137)
 npm start          # serves the cockpit at http://127.0.0.1:4477
 ```
 
-Current-state docs (features, mechanisms, options/parameters) live in [`docs/reference/`](docs/reference/). The original design spec and implementation plan have been removed from the tree; they remain in git history.
+Current-state docs (architecture, features, mechanisms, options/parameters) live in [`docs/`](docs/) — enter via [`local-docs.md`](local-docs.md). The original design spec and implementation plan have been removed from the tree; they remain in git history.
 
 ## Requirements
 

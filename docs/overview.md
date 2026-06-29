@@ -1,0 +1,34 @@
+# Architecture overview
+
+How cc-cockpit fits together, end to end. This is the orienting prose; the per-area detail lives in the handle-keyed files (`features.md` `FEAT-`, `mechanisms.md` `MECH-`, `options.md` `OPT-`). Conventions: see [README.md](./README.md).
+
+**Last verified: 2026-06-29**
+
+## What it is
+
+A personal, local web app: a multi-session **Claude Code cockpit**. One browser window lists every session the cockpit owns in a sidebar; clicking one focuses it and switches the main pane (conversation, header controls, compose box) to it. The unit is a *session*, not a project. It is built entirely on the **Claude Agent SDK** — there is no PTY/terminal substrate (SDK-only, no fallback).
+
+## Process model — one SDK query per session
+
+Each session is driven by one durable Claude Agent SDK `query()` that **spawns and owns a child `claude` subprocess** and talks to it over stdio for the session's lifetime (`MECH-sdk-driver`). The cockpit pushes user turns into that channel as streamed messages and renders everything the child emits back. The child authenticates on the **user's own Claude Code subscription** — never on an API key — which is the project's load-bearing posture: the env handed to each spawn is scrubbed of parent-session markers and of any direct-auth / alternate-provider overrides (`MECH-env-scrub`, `MECH-zero-token-guardrails`), and the binary is the version-pinned one bundled with the SDK (`MECH-binary-strategy`). A pre-flight guard rejects a spawn whose working folder has vanished, with a truthful error (`MECH-cwd-guard`).
+
+## Server ↔ browser bridge
+
+A small Node HTTP/WebSocket server bridges each session's render model to a single web page (`MECH-gui-protocol`). On focus it sends a full snapshot; thereafter it broadcasts incremental deltas, plus per-session meta (mode/model/usage) and the live session list. A side-effect-free `peek` powers the read-only Quick preview without focusing a session. The browser client owns all rendering and the compose box; it never screen-scrapes a terminal.
+
+## Core logic and testability
+
+Two pieces hold the core logic, both dependency-injected and event-emitting so they are unit-testable with no real `claude`:
+
+- The **session registry** (`MECH-session-registry`) is the authoritative in-memory list — it owns each session's driver, cwd, status flags, focus, and naming, derives each session's state from the SDK stream's turn boundaries (`MECH-session-state`), and emits the events the server broadcasts. Nothing in it persists across a server restart.
+- The **normalize fold** (`MECH-normalize-fold`) is a pure transform from Claude Code conversation records into the render model the GUI consumes, with a live (delta-emitting) entry point and a batch seed (for attach/resume).
+
+The SDK's control channel surfaces every "Claude is waiting on you" moment as a tagged interaction and carries the live mode/model/interrupt controls (`MECH-control-channel`). Usage windows for the header chip are folded from the SDK's usage reads (`MECH-usage-windows`). Read-only scanners of `~/.claude` provide resume discovery (`MECH-discovery-scan`), and the filesystem (no database) is the store for projects (`MECH-projects`), image uploads (`MECH-uploads`), and the per-session topics feed (`MECH-topics`). The exact wire shapes are in `MECH-stream-json-shapes`.
+
+## What the user sees
+
+The capability surface — the sidebar and session states, the New-session and Resume pickers, temporary sessions, rename, quick preview, the blocking interaction modal, the usage chip, header controls, floating todo/topic panels, conversation rendering, image paste, and the GUI error center — is catalogued in `features.md`. The element-level visual map of that GUI (every on-screen element by `GUI-` handle) is generated separately by the `/gui-map` skill under `features-gui-mapping/` (to be indexed here as `gui-map.md`).
+
+## What you can tune
+
+A small set of options (`options.md`): the listen port and the fixed loopback bind, the per-session permission mode / model / effort, the projects root and the `~/.claude` config location, the spawn env-scrub set and the bundled-binary choice, plus the background poll intervals and the Playwright-MCP output dir.

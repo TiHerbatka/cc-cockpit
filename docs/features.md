@@ -1,6 +1,8 @@
 # Features (current state)
 
-Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md). Keep facts here only — do not duplicate them in CLAUDE.md.
+Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README.md](./README.md). Keep facts here only — do not duplicate them in CLAUDE.md.
+
+**Last verified: 2026-06-29**
 
 ### FEAT-multi-session-cockpit — Multi-session cockpit
 
@@ -11,6 +13,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Clicking a session focuses it, moves the cursor into its compose box, and shows its conversation and controls.
 - A turn is sent as one structured message to the focused session (no keystroke emulation).
 - New sessions are started from the cockpit (the New-session and Resume buttons), not from terminal tabs.
+
+**Area:** the cockpit web client and the session registry.
 
 **Last verified: 2026-06-29**
 
@@ -25,6 +29,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Each row has a ✕ control: on a live session it kills the running Claude (after a confirm prompt); on an exited session it removes the row from the cockpit.
 - Right-clicking a row opens a context menu (Quick preview, Open folder, Rename).
 
+**Area:** the sidebar render in the web client and the registry's grouping/derivation.
+
 **Last verified: 2026-06-29**
 
 ### FEAT-session-state — Session states & attention signals
@@ -35,6 +41,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - States and their dots: Working (spinning gear), Needs-you (pulsing triangle — any gated interaction is open and awaiting your answer: a tool-permission, AskUserQuestion, plan-review, or MCP-elicitation prompt), Your-move (steady dot — a background session finished its turn and is waiting), Idle (hollow dot), Exited (✕).
 - Your-move is the signal that a session you weren't looking at has finished and wants you; focusing that session acknowledges it and clears the signal.
 - The Stop/interrupt control in the header appears only while a session is Working.
+
+**Area:** the registry's status derivation and the sidebar/header state render.
 
 **Last verified: 2026-06-29**
 
@@ -49,6 +57,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - A warning chip flags projects that were created but never used, and clicking it lists them.
 - A "+ Temporary session" button starts a one-off session instead (see FEAT-temp-sessions).
 
+**Area:** the New-session picker in the web client and the projects API.
+
 **Last verified: 2026-06-29**
 
 ### FEAT-resume-discovery — Resume past sessions
@@ -60,6 +70,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Recent sessions are shown in age-band columns (Last 24h / 1–3 days / 3–7 days), grouped by folder and titled from each session's own title; an "Older than 7 days" toggle reveals the rest.
 - A search box filters by session title, project, or folder path.
 - Clicking a listed session resumes it in its original working directory as a new live session in the cockpit.
+
+**Area:** the Resume picker in the web client and the recent-session discovery scan.
 
 **Last verified: 2026-06-29**
 
@@ -73,6 +85,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Auto-labeled (a timestamp-style name initially, upgraded to a real title once one is available).
 - Not auto-deleted — they persist and can be resumed later.
 
+**Area:** the temp-session creation in the projects layer and the New-session picker.
+
 **Last verified: 2026-06-29**
 
 ### FEAT-rename — Rename a session
@@ -83,6 +97,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Reached via the session row's right-click context menu (Rename), opening a small modal pre-filled with the current name.
 - The custom name takes precedence over the auto-title and the folder name.
 - The custom name is held in memory by the server and is lost on a server restart (it then falls back to the auto-title or folder name).
+
+**Area:** the registry rename and the rename modal in the web client.
 
 **Last verified: 2026-06-29**
 
@@ -96,6 +112,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Stays current via the same live conversation updates the cockpit already receives; it does not focus, acknowledge, or send anything to the session.
 - Has no compose box; closes with its ✕ or Escape.
 
+**Area:** the `peek` protocol path and the preview modal in the web client.
+
 **Last verified: 2026-06-29**
 
 ### FEAT-navigation — Navigation conveniences
@@ -108,6 +126,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Projects and recent sessions are organized into last-used time bands (Last 24h / 1–3 days / 3–7 days) with an "Older than 7 days" view.
 - Modals close on Escape.
 
+**Area:** the web-client modals and the open-folder handler.
+
 **Last verified: 2026-06-29**
 
 ### FEAT-image-paste — Image paste & upload in compose
@@ -119,6 +139,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Tokens can be dragged to reposition them within the message before sending.
 - Right-clicking a token offers "Open in default app" to view the image.
 - On send, each token is serialized into the message as the uploaded file's path (quoted if it contains spaces).
+
+**Area:** the compose editor and the image-upload path.
 
 **Last verified: 2026-06-29**
 
@@ -133,6 +155,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - AskUserQuestion shows each question's options (single- or multi-select) with a Submit button; MCP elicitation shows the requested fields (or a link) with Submit / Decline.
 - The modal overlays only the conversation pane — the sidebar stays usable — and a pending request is re-shown if you switch away and back to that session.
 
+**Area:** the interaction modal in the web client and the SDK control channel.
+
 **Last verified: 2026-06-29**
 
 ### FEAT-usage-chip — Usage chip
@@ -143,6 +167,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Segments shown: per-turn tokens (in ↓ / out ↑), context-window percent, and the 5-hour and 7-day rolling-window percents.
 - The window segments are color-coded by utilization (green under 70%, yellow 70–90%, red at/above 90%) and carry a "resets at" tooltip.
 - The chip is per-session and resets when you switch sessions; each incoming figure updates only its own segment.
+
+**Area:** the header usage chip and the usage-window computation.
 
 **Last verified: 2026-06-29**
 
@@ -157,6 +183,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - A Stop control interrupts the current turn; it appears only while the session is working.
 - Changing any control acts on the focused session and the header updates to reflect the new value.
 
+**Area:** the header controls and the session control channel.
+
 **Last verified: 2026-06-29**
 
 ### FEAT-float-panels — Floating todo / topic panels
@@ -169,6 +197,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - "TODO.MD" fetches and shows the session folder's TODO.md (sections and checkbox items).
 - A fourth header button among the doc-buttons, "📄 Docs", does NOT float a panel: it opens the focused session's `local-docs.md` (in the session cwd) in the OS default app. A missing file yields a "not found" error routed to the error center (see FEAT-error-center).
 - The panel floats over the chat without shrinking it, only one source is open at a time, and it closes with its ✕ or Escape.
+
+**Area:** the floating panels in the web client and the topics/todo/TODO.md feeds.
 
 **Last verified: 2026-06-29**
 
@@ -183,6 +213,8 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - A "Waiting for Claude…" spinner covers the gap between sending a turn and Claude's first output, clearing on the first response item, a focus change, an interaction prompt, or an error.
 - The log auto-scrolls to the newest item when you're already at the bottom.
 
+**Area:** the conversation render in the web client and the normalize fold.
+
 **Last verified: 2026-06-29**
 
 ### FEAT-error-center — GUI error center
@@ -194,5 +226,7 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Each entry shows a wall-clock timestamp and, when a stack trace is available, an expandable "stack" button that opens the trace in a modal.
 - Captures window 'error' events, unhandled promise rejections, WebSocket failures ("WebSocket connection error" on error, "WebSocket disconnected" on close), server-pushed errors (shown prefixed "Server: "), and image-upload failures.
 - A new error re-arms an unread pulse on the button unless the panel is already open; the list caps at 200 entries (oldest dropped); a "clear" button empties it.
+
+**Area:** the GUI error center in the web client.
 
 **Last verified: 2026-06-29**

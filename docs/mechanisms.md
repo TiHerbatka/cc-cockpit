@@ -1,6 +1,8 @@
 # Mechanisms (current state)
 
-Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md). Keep facts here only — do not duplicate them in CLAUDE.md.
+Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README.md](./README.md). Keep facts here only — do not duplicate them in CLAUDE.md.
+
+**Last verified: 2026-06-29**
 
 ### MECH-sdk-driver — One durable SDK query per session
 
@@ -11,7 +13,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - The bundled child `claude` authenticates on the user's own Claude Code subscription (verified via the `five_hour` subscription rate-limit), so the subscription-only posture holds.
 - The spawn is configured through SDK options (`cwd`, `env`, `permissionMode`, `canUseTool`, `onElicitation`, `resume`, `abortController`) and controlled through SDK methods (interrupt, set permission mode / model / effort, usage reads) — the caller never gets a raw OS process handle.
 - User turns are pushed as streamed user messages into the same query; `resume` re-attaches a prior session id as a new live session.
-- Role-level location: the session-spawn / SDK-driver path.
+
+**Area:** the session-spawn / SDK-driver path.
 
 **Last verified: 2026-06-29**
 
@@ -24,7 +27,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Also strips the direct-auth / alternate-provider overrides — `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, and `ANTHROPIC_BASE_URL` — so the child can never fall into an API-key or gateway auth path; this is the actual subscription-only auth guard.
 - Mandatory: without the marker strip a spawned `claude` inherits the child-session marker and writes no transcript (the no-transcript bug).
 - The cockpit hands the SDK `env` option the complete scrubbed environment because that option replaces (does not merge with) the child env; a minimal env would instead break the spawn (lost `PATH`/`USERPROFILE`).
-- Role-level location: the session-spawn path.
+
+**Area:** the session-spawn path.
 
 **Last verified: 2026-06-29**
 
@@ -36,7 +40,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Guards both spawn paths: a `create` whose picked folder was removed, and a `resume` whose original cwd is gone.
 - Without it the SDK child spawn fails with ENOENT, which the SDK mislabels as a binary/libc launch failure — the guard surfaces the real cause ("folder no longer exists") instead.
 - The existence check is dependency-injected: a permissive default in the app factory (so the pure server stays unit-testable with synthetic cwds), with the real filesystem check wired in at the production entry point.
-- Role-level location: the WebSocket create/resume handlers, guarded before the registry spawns the driver.
+
+**Area:** the WebSocket create/resume handlers, guarded before the registry spawns the driver.
 
 **Last verified: 2026-06-29**
 
@@ -50,6 +55,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Todos aggregate from two sources — native TodoWrite full snapshots and the granular TaskCreate/TaskUpdate system (the task id arrives in the TaskCreate result, later referenced by TaskUpdate); the Task* aggregate wins when that system was used.
 - Dependency-free and side-effect-free by design, so it is exhaustively unit-testable with an injected fake stream.
 
+**Area:** the conversation normalize fold.
+
 **Last verified: 2026-06-29**
 
 ### MECH-session-state — SDK-stream-driven session state
@@ -62,6 +69,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - your-move vs idle is derived purely from focus in the registry — it distinguishes a background turn-end (Claude finished, or asked a prose question) from an active amber permission prompt.
 - No hook settings are injected: there is no `--settings` hooks file and no POST back to the cockpit — turn boundaries come entirely from the SDK message stream, which also removes the mid-turn idle flicker that output-silence guessing produced.
 
+**Area:** the registry's status derivation.
+
 **Last verified: 2026-06-29**
 
 ### MECH-gui-protocol — GUI render protocol over WebSocket
@@ -73,6 +82,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - `attach` acknowledges (focuses) the session and re-sends a snapshot plus any still-pending interaction; `gui-attach` only re-sends a snapshot; `gui-detach` is a no-op because deltas are broadcast to every client.
 - `peek` is a side-effect-free read for Quick preview: it returns the session's current model (`peeked`) WITHOUT focusing/acknowledging it; live updates ride the broadcast `gui-delta` (the client filters by preview id).
 - `meta` carries per-session mode/model/usage/effort; `sessions` carries the live session list; `interaction-request` surfaces a pending prompt to answer.
+
+**Area:** the server↔client WebSocket bridge.
 
 **Last verified: 2026-06-29**
 
@@ -88,6 +99,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Optimistic user-echo on send: the SDK does not echo streamed user input back as a user message, so on send the registry folds a synthetic user record into the conversation itself and emits the delta — a just-sent turn renders immediately rather than waiting for the SDK to reflect it.
 - Emits `delta`, `meta`, `sessions`, `interaction`, and `session-error`.
 
+**Area:** the in-memory session registry.
+
 **Last verified: 2026-06-29**
 
 ### MECH-discovery-scan — Transcript tail + recent-session scan
@@ -99,6 +112,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - The recent scan reads `~/.claude/projects/*/*.jsonl` grouped by folder; cwd and aiTitle are read from inside each jsonl (never from the lossy folder name); a top-level-only `.jsonl` filter excludes subagent transcripts that live in subdirectories.
 - Resume windows: day (24h), 3d (72h), week (7d), all (Infinity).
 - The `~/.claude` location resolves from `CLAUDE_CONFIG_DIR`, else the home directory.
+
+**Area:** the transcript-tail and recent-session discovery scanners.
 
 **Last verified: 2026-06-29**
 
@@ -113,6 +128,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Reserved Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9) are excluded as project names.
 - Create-project name validation (`POST /api/projects`) rejects: empty/whitespace, names containing a path separator (`\` or `/`), names containing `..`, the illegal characters `<>:"|?*`, any control character (code < 32), and the reserved device names above; an already-existing project is rejected with HTTP 409. The POST body is capped at 4096 bytes.
 
+**Area:** the projects/discovery layer.
+
 **Last verified: 2026-06-29**
 
 ### MECH-uploads — Image upload + prompt-token serialization
@@ -124,6 +141,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - The compose box holds descriptors (`text` / `br` / `token{path}`); serialization turns each token into the file's absolute path, quoted when it contains whitespace, so Claude receives the image as a path reference in the prompt text.
 - Filenames are sanitized, collisions are de-duplicated, and an auto timestamp name is used when none is supplied.
 
+**Area:** the image-upload endpoint and the compose serialization.
+
 **Last verified: 2026-06-29**
 
 ### MECH-topics — Per-session topics file feed
@@ -134,6 +153,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Reads `~/.claude/topics/<ccSessionId>.json`, expecting `{ topics: [...] }`; returns an empty list on any problem (purely additive — never raised as an error).
 - Polled per live session on a low-frequency interval (~1.5s) and pushed onto the session record.
 - The topics file is operational state written by the assistant's topic-tracking convention, not by the cockpit.
+
+**Area:** the per-session topics poll and reader.
 
 **Last verified: 2026-06-29**
 
@@ -147,6 +168,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Live control methods: `setPermissionMode(mode)`, `setModel(model)`, effort via the flag-settings layer, `interrupt()` (soft turn interrupt), and an `abortController` whose abort tears the session down (kill).
 - Each control method is defensively guarded — a missing SDK method degrades to a no-op rather than throwing.
 
+**Area:** the SDK control channel in the session driver.
+
 **Last verified: 2026-06-29**
 
 ### MECH-usage-windows — Usage-window computation for the header chip
@@ -158,6 +181,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Refreshed on `system/init` (seed at session start) and on the terminal `result` (after each turn); a per-session in-flight guard de-dups concurrent refreshes.
 - The rolling-window method is experimental and the only source for 5h/7d, so its failure or absence degrades the chip to null rather than throwing.
 - Results ride the `meta` event to clients.
+
+**Area:** the usage-window computation feeding the header chip.
 
 **Last verified: 2026-06-29**
 
@@ -173,6 +198,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Because the cockpit injects no hooks, the SessionStart hook-lifecycle messages (`system/hook_*`) do not occur.
 - The SDK wraps stream-json rather than replacing it — the same substrate at a higher layer, not a competing option.
 
+**Area:** the SDK message stream and its mapping in the session driver.
+
 **Last verified: 2026-06-29**
 
 ### MECH-binary-strategy — SDK-bundled claude binary strategy
@@ -185,6 +212,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Required practice so it doesn't stall: bump `@anthropic-ai/claude-agent-sdk` and reinstall, test-gated (the pre-1.0 SDK JS API can change between releases).
 - Pointing `pathToClaudeCodeExecutable` at the user's standalone `claude` is rejected as the default (it forfeits the version guarantee — SDK and standalone CLI are independent publish streams that can drift into silent protocol breakage), kept only as a possible opt-in; Electron packaging must `asarUnpack` the bundled binary and point at the unpacked path.
 
+**Area:** the SDK session spawn (binary selection).
+
 **Last verified: 2026-06-29**
 
 ### MECH-zero-token-guardrails — Zero-token / subscription-only guardrails
@@ -196,5 +225,7 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - The zero-token invariant is mandatory: what got other tools banned was extracting the subscription OAuth token and using it in their own client/servers — cc-cockpit must never do that.
 - The env scrub at spawn (see `MECH-env-scrub`) is part of the subscription-only posture; do not rely on `forceLoginMethod` (version-churned + an open bug) — env scrubbing is the real guard.
 - Commercialization verdict: LOW–MEDIUM risk, a tolerated gray area; realistic worst case is a C&D plus a reversible abuse-flag suspension, not a targeted ban, as long as the invariant holds. Not legal advice.
+
+**Area:** the session-spawn env construction (the subscription-only posture).
 
 **Last verified: 2026-06-29**
