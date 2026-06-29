@@ -16,7 +16,7 @@ A small Node server drives each `claude` session through the Claude Agent SDK's 
 
 ```sh
 npm install        # installs dependencies
-npm test           # runs the unit/integration tests (137/137)
+npm test           # runs the unit/integration tests (156/156)
 npm start          # serves the cockpit at http://127.0.0.1:4477
 ```
 

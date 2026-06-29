@@ -11,7 +11,7 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 **Key facts:**
 - One durable streaming `query()` per cockpit session (hard constraint); it is NOT a thin network client to the API — it spawns and owns the child `claude` over stdio.
 - The bundled child `claude` authenticates on the user's own Claude Code subscription (verified via the `five_hour` subscription rate-limit), so the subscription-only posture holds.
-- The spawn is configured through SDK options (`cwd`, `env`, `permissionMode`, `canUseTool`, `onElicitation`, `resume`, `abortController`) and controlled through SDK methods (interrupt, set permission mode / model / effort, usage reads) — the caller never gets a raw OS process handle.
+- The spawn is configured through SDK options (`cwd`, `env`, `permissionMode`, `settingSources` = `['user','project','local']`, `allowDangerouslySkipPermissions`, `canUseTool`, `onElicitation`, `resume`, `abortController`) and controlled through SDK methods (interrupt, set permission mode / model / effort, usage reads) — the caller never gets a raw OS process handle.
 - User turns are pushed as streamed user messages into the same query; `resume` re-attaches a prior session id as a new live session.
 
 **Area:** the session-spawn / SDK-driver path.
@@ -47,7 +47,7 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 
 ### MECH-normalize-fold — Conversation normalize fold
 
-**What it does:** A pure, side-effect-free fold turns Claude Code conversation records into the render model the GUI consumes. It exposes two entry points over one shared fold: a stateful live fold that returns delta ops as each SDK message arrives, and a batch seed that returns a full model (used on attach/resume from the on-disk transcript).
+**What it does:** A pure, side-effect-free fold turns Claude Code conversation records into the render model the GUI consumes. It exposes two entry points over one shared fold: a stateful live fold that returns delta ops as each SDK message arrives, and a batch seed that returns a full model (used on resume to seed from the on-disk transcript; attach re-sends the already-folded in-memory model, not a fresh seed).
 
 **Key facts:**
 - Render model is `{ title, items, status }`; `items[]` are ordered entries of kind `user`, `assistant`, `thinking`, `tool` (with `id`, `name`, `input`, `status` of pending/ok/error, `resultText`), or `todos`.
@@ -105,10 +105,10 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 
 ### MECH-discovery-scan — Transcript tail + recent-session scan
 
-**What it does:** Two read-only scanners of Claude Code's on-disk history. One locates and incrementally tails a live session's transcript; the other scans all projects to list recent past sessions for the Resume modal, reading cwd/title from inside each file.
+**What it does:** Two read-only readers of Claude Code's on-disk history. One locates a session's transcript and reads it once to seed a resumed session; the other scans all projects to list recent past sessions for the Resume modal, reading cwd/title from inside each file. (An incremental tailer helper exists but is not used in the SDK-only build — the live conversation comes from the SDK stream.)
 
 **Key facts:**
-- The transcript tailer locates `<ccSessionId>.jsonl` under `~/.claude/projects/*/` (a one-level scan, since the basename is the exact session id) and tails it incrementally.
+- The transcript locator finds `<ccSessionId>.jsonl` under `~/.claude/projects/*/` (a one-level scan, since the basename is the exact session id) and reads it once for resume-seeding; the incremental tailer (`createTailer`) is test-only, not instantiated in production (see `OPT-poll-interval`).
 - The recent scan reads `~/.claude/projects/*/*.jsonl` grouped by folder; cwd and aiTitle are read from inside each jsonl (never from the lossy folder name); a top-level-only `.jsonl` filter excludes subagent transcripts that live in subdirectories.
 - Resume windows: day (24h), 3d (72h), week (7d), all (Infinity).
 - The `~/.claude` location resolves from `CLAUDE_CONFIG_DIR`, else the home directory.

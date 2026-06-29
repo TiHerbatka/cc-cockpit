@@ -29,7 +29,7 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 - Each row has a ✕ control: on a live session it kills the running Claude (after a confirm prompt); on an exited session it removes the row from the cockpit.
 - Right-clicking a row opens a context menu (Quick preview, Open folder, Rename).
 
-**Area:** the sidebar render in the web client and the registry's grouping/derivation.
+**Area:** the sidebar render in the web client and the registry's per-session project/temp tagging and status derivation.
 
 **Last verified: 2026-06-29**
 
@@ -139,6 +139,7 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 - Tokens can be dragged to reposition them within the message before sending.
 - Right-clicking a token offers "Open in default app" to view the image.
 - On send, each token is serialized into the message as the uploaded file's path (quoted if it contains spaces).
+- Uploads are capped at 25 MB (decoded); a larger image is rejected (HTTP 413).
 
 **Area:** the compose editor and the image-upload path.
 
