@@ -1,9 +1,9 @@
-// features-gui-mapping/tooling/fixture-server.js
+// .claude/skills/gui-map/fixture-server.js
 // DEV-ONLY launcher for the /gui-map skill. NOT product code — it ships nothing
 // into the cockpit. It imports the REAL app (server/app.js) and injects a fake
 // spawnDriver through the existing dependency-injection seam, so every pixel is
 // the genuine GUI but driven by canned data: no live `claude`, no subscription
-// tokens, fully deterministic. Run it directly:  node features-gui-mapping/tooling/fixture-server.js
+// tokens, fully deterministic. Run it directly:  node .claude/skills/gui-map/fixture-server.js
 //
 // It binds 127.0.0.1 only (like the real server) on PORT||4488 so it can run
 // alongside the real cockpit (4477). The skill points Playwright at it, arranges
@@ -11,7 +11,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { createApp } = require('../../server/app');
+const { createApp } = require('../../../server/app');
 const { makeFixtureDriver, SESSIONS, ALPHA_TODO_MD } = require('./fixture-data');
 
 const HOME = path.join(__dirname, 'fixture-home');
@@ -72,12 +72,11 @@ const { server, registry } = createApp({
   dirExists: () => true,
 });
 
-// A tiny aux static server (PORT+1) serving the probe + manifest with CORS, so
-// the skill can inject the capture helper into the fixture page with a 3-line
-// bootstrap instead of pasting large blobs. Dev-only, same as everything here.
+// A tiny aux static server (PORT+1) serving the probe with CORS, so the skill can
+// inject the discovery helper into the fixture page with a 2-line bootstrap
+// instead of pasting a large blob. Dev-only, same as everything here.
 const AUX_FILES = {
   '/probe.js': { file: path.join(__dirname, 'probe.js'), type: 'text/javascript; charset=utf-8' },
-  '/manifest.json': { file: path.join(__dirname, '..', 'manifest.json'), type: 'application/json; charset=utf-8' },
 };
 const aux = require('node:http').createServer((req, res) => {
   const entry = AUX_FILES[req.url.split('?')[0]];
@@ -105,5 +104,5 @@ server.listen(PORT, HOST, () => {
     }
   }
   console.log(`gui-map fixture listening on http://${HOST}:${PORT} (${SESSIONS.length} canned sessions)`);
-  console.log(`gui-map aux (probe + manifest, CORS) on http://${HOST}:${PORT + 1}`);
+  console.log(`gui-map aux (probe, CORS) on http://${HOST}:${PORT + 1}`);
 });

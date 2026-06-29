@@ -3,6 +3,6 @@ public/vendor/
 .playwright-mcp/
 temp/
 # /gui-map skill: the fixture launcher regenerates this canned tree on every run
-features-gui-mapping/tooling/fixture-home/
-# /gui-map skill: intermediate per-run capture rects (glossary.md/map.html are the artifacts)
-features-gui-mapping/captures.json
+.claude/skills/gui-map/fixture-home/
+# /gui-map skill: intermediate per-run capture rects (docs/gui-map.md + docs/gui-map/ are the artifacts)
+.claude/skills/gui-map/captures.json

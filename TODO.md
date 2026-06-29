@@ -45,7 +45,7 @@ Built on `feat/gui-mode` this session:
 - [ ] A7. Collapse runs of consecutive tool-use cards in the conversation: when more than 2 tool uses occur back-to-back, group them into a single collapsed entry; the user unfolds the group to reveal the individual tool cards, each still individually expandable/clickable exactly as today.
 - [ ] A8. [TOP PRIORITY 1/3] Documentation structure & conventions (no scripts): local-docs.md as the general-info entry point/index; docs/ holds the detailed docs; a docs/README.md guide defines handles + entry format + freshness/anti-staleness convention; CLAUDE.md upkeep guidelines. Human- and Claude-readable.
 - [x] A9. [TOP PRIORITY 2/3] Rework docs/reference/ (superpowers-era) into the new docs/ structure (features/mechanisms/options/overview), adjusted to the new documentation conventions; update CLAUDE.md + code pointers; remove docs/reference/.
-- [ ] A10. [TOP PRIORITY 3/3] gui-map skill: auto-detect new GUI elements from the documentation (not the hand-curated manifest); treat the generated glossary/map as documentation within the docs structure; relocate the gui-map mechanism files (fixture/probe/build/manifest) into .claude/skills/gui-map/.
+- [x] A10. [TOP PRIORITY 3/3] gui-map skill: auto-detect new GUI elements from the documentation (not the hand-curated manifest); treat the generated glossary/map as documentation within the docs structure; relocate the gui-map mechanism files (fixture/probe/build/manifest) into .claude/skills/gui-map/.
 
 ## B. Quick wins
 

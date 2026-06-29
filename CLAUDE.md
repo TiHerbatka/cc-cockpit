@@ -34,7 +34,7 @@ Full mechanism reference: the `MECH-` entries in `docs/` (enter via [`local-docs
 
 `local-docs.md` is this project's **structured documentation front door, not a scratch file** — do not blank, overwrite, or junk-append it. The global "local docs" convention (recreate-if-absent / catch-all scratch target) is **overridden here**; transient notes go only in its *Active scratch notes* section.
 
-Migration: the GUI glossary + map (`features-gui-mapping/`) will wire in as `docs/gui-map.md`, with its mechanism files moving into `.claude/skills/gui-map/` (A10).
+The GUI glossary + visual map is generated documentation — [`docs/gui-map.md`](docs/gui-map.md) (+ `docs/gui-map/map.html`), auto-discovered from the live GUI by the `/gui-map` skill (mechanism files under `.claude/skills/gui-map/`). It is generated — never hand-edit; re-run the skill to refresh.
 
 ## Conventions
 
