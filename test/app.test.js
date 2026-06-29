@@ -505,6 +505,61 @@ test('WS create with a missing folder reports an error and does not spawn', asyn
   await new Promise((r) => server.close(r));
 });
 
+test('WS read-todo returns parsed TODO.md entries for the focused session cwd', async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-todo-'));
+  fs.writeFileSync(path.join(cwd, 'TODO.md'), '# TODO\n\n## A. X\n- [ ] A1. first\n- [x] A2. second\n');
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
+  ws.send(JSON.stringify({ type: 'create', cwd }));
+  const id = (await created).sessions[0].id;
+
+  const got = nextMessage(ws, (m) => m.type === 'todo-content');
+  ws.send(JSON.stringify({ type: 'read-todo', id }));
+  const res = await got;
+
+  assert.strictEqual(res.id, id);
+  assert.strictEqual(res.found, true);
+  assert.deepStrictEqual(res.entries, [
+    { kind: 'section', text: 'A. X' },
+    { kind: 'item', done: false, depth: 0, text: 'A1. first' },
+    { kind: 'item', done: true, depth: 0, text: 'A2. second' },
+  ]);
+
+  ws.close();
+  await new Promise((r) => server.close(r));
+  fs.rmSync(cwd, { recursive: true, force: true });
+});
+
+test('WS read-todo reports found:false when the session has no TODO.md', async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-todo-none-'));
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({ spawnDriver: factory });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => ws.on('open', r));
+
+  const created = nextMessage(ws, (m) => m.type === 'sessions' && m.sessions.length === 1);
+  ws.send(JSON.stringify({ type: 'create', cwd }));
+  const id = (await created).sessions[0].id;
+
+  const got = nextMessage(ws, (m) => m.type === 'todo-content');
+  ws.send(JSON.stringify({ type: 'read-todo', id }));
+  const res = await got;
+  assert.strictEqual(res.found, false);
+  assert.deepStrictEqual(res.entries, []);
+
+  ws.close();
+  await new Promise((r) => server.close(r));
+  fs.rmSync(cwd, { recursive: true, force: true });
+});
+
 test('WS create-temp starts a temporary session (temp:true, project null)', async () => {
   const root = tmpRoot();
   const { factory } = fakeDriverFactory();
@@ -598,9 +653,10 @@ test('WS open-folder invokes the explorer opener with the session cwd', async ()
   await new Promise((r) => server.close(r));
 });
 
-test('open-file opens the cwd doc via the injected opener; missing file -> error', async () => {
+test('open-file opens local-docs.md via the injected opener; missing file -> error', async () => {
+  // open-file only targets local-docs.md now — the old "open TODO.md in the OS"
+  // path was replaced by the in-cockpit TODO.MD panel (read-todo).
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-of-'));
-  fs.writeFileSync(path.join(cwd, 'local-docs.md'), '# hi');
   const calls = [];
   const { factory } = fakeDriverFactory();
   const { server } = createApp({ spawnDriver: factory, openFile: (p) => calls.push(p) });
@@ -612,10 +668,16 @@ test('open-file opens the cwd doc via the injected opener; missing file -> error
   ws.send(JSON.stringify({ type: 'create', cwd }));
   const id = (await created).sessions[0].id;
 
+  // No local-docs.md yet -> error, opener not called.
+  const errMsg = nextMessage(ws, (m) => m.type === 'error');
   ws.send(JSON.stringify({ type: 'open-file', id, which: 'docs' }));
-  const errForTodo = nextMessage(ws, (m) => m.type === 'error');
-  ws.send(JSON.stringify({ type: 'open-file', id, which: 'todo' }));
-  await errForTodo;
+  assert.match((await errMsg).message, /local-docs\.md not found/);
+  assert.strictEqual(calls.length, 0);
+
+  // Now it exists -> the opener is called with its path.
+  fs.writeFileSync(path.join(cwd, 'local-docs.md'), '# hi');
+  ws.send(JSON.stringify({ type: 'open-file', id, which: 'docs' }));
+  for (let i = 0; i < 100 && calls.length === 0; i += 1) await new Promise((r) => setTimeout(r, 10));
   assert.deepStrictEqual(calls, [path.join(cwd, 'local-docs.md')]);
 
   ws.close();

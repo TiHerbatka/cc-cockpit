@@ -125,6 +125,7 @@ function readFileAsBase64(file) {
 function detachGui() {
   if (guiWatchedId) { ws.send(JSON.stringify({ type: 'gui-detach', id: guiWatchedId })); guiWatchedId = null; }
   gui.clear();
+  closeFloat();
 }
 
 // SDK sessions are GUI-only (the terminal substrate was removed - no fallback).
@@ -143,8 +144,12 @@ function updateHead() {
   headState.textContent = s ? (STATE_ICON[s.status] || '○') : '';
   // Stop button is available only while a turn is running.
   if (interruptBtn) interruptBtn.hidden = !(s && s.status === 'working');
-  // Push the focused session's tracked topics to the GUI panel.
-  gui.setTopics(s ? s.topics : []);
+  // Feed the floating header panels: the focused session's topics live here;
+  // in-session todos come from guiModel. Buttons act only on a focused session.
+  currentTopics = s ? (s.topics || []) : [];
+  setFloatButtonsEnabled(!!s);
+  if (!s) closeFloat();
+  else if (floatSource === 'topics') renderFloat();
 }
 
 // ---- Chips + controls: permission mode, usage, interrupt, model -------------
@@ -249,9 +254,113 @@ if (modelSelect) modelSelect.onchange = () => { if (focusedId) ws.send(JSON.stri
 if (effortSelect) effortSelect.onchange = () => { if (focusedId) ws.send(JSON.stringify({ type: 'set-effort', id: focusedId, level: effortSelect.value })); };
 // Doc buttons: open the focused session's local-docs.md / TODO.md via the OS default app.
 const openDocsBtn = document.getElementById('open-docs');
-const openTodoBtn = document.getElementById('open-todo');
 if (openDocsBtn) openDocsBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'open-file', id: focusedId, which: 'docs' })); };
-if (openTodoBtn) openTodoBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'open-file', id: focusedId, which: 'todo' })); };
+
+// ---- Floating todo/topic panels over the chat (one shared overlay) ----------
+// Each header button toggles this panel for its source. The data is what app.js
+// already holds: in-session todos (guiModel.status.todos), the focused session's
+// topics, and TODO.md fetched on demand (read-todo). X or Esc close it.
+const contentEl = document.getElementById('content');
+const openTodoMdBtn = document.getElementById('open-todomd');
+const openInsessionBtn = document.getElementById('open-insession');
+const openTopicsBtn = document.getElementById('open-topics');
+const FLOAT_TITLES = { insession: 'In-session todos', topics: 'Topics', todomd: 'TODO.md' };
+let floatSource = null;   // 'insession' | 'topics' | 'todomd' | null
+let floatEl = null;
+let currentTopics = [];
+let todoMdState = { loading: false, found: false, entries: [] };
+
+function setFloatButtonsEnabled(on) {
+  for (const b of [openTodoMdBtn, openInsessionBtn, openTopicsBtn]) if (b) b.disabled = !on;
+}
+function closeFloat() {
+  if (floatEl) { floatEl.remove(); floatEl = null; }
+  floatSource = null;
+}
+function floatEmpty(text) { const d = document.createElement('div'); d.className = 'float-empty'; d.textContent = text; return d; }
+function renderInsessionInto(body) {
+  const todos = (guiModel && guiModel.status && guiModel.status.todos) || [];
+  if (!todos.length) { body.appendChild(floatEmpty('No in-session todos.')); return; }
+  const ul = document.createElement('ul');
+  ul.className = 'gui-todos';
+  for (const t of todos) {
+    const li = document.createElement('li');
+    li.className = 'todo-' + t.status;
+    li.textContent = (TODO_GLYPH[t.status] || '•') + ' ' + t.content;
+    ul.appendChild(li);
+  }
+  body.appendChild(ul);
+}
+function renderTopicsInto(body) {
+  const topics = currentTopics || [];
+  if (!topics.length) { body.appendChild(floatEmpty('No topics tracked for this session.')); return; }
+  const ul = document.createElement('ul');
+  ul.className = 'float-topics';
+  for (const t of topics) {
+    const li = document.createElement('li');
+    li.className = 'topic-' + t.status;
+    const dot = t.status === 'active' ? '●' : t.status === 'parked' ? '◐' : '○';
+    const code = document.createElement('span'); code.className = 'topic-code'; code.textContent = t.code || '';
+    const name = document.createElement('span'); name.className = 'topic-name'; name.textContent = ' ' + (t.name || '');
+    const d = document.createElement('span'); d.className = 'topic-dot'; d.textContent = ' ' + dot;
+    li.appendChild(code); li.appendChild(name); li.appendChild(d);
+    if (t.summary) { const sm = document.createElement('div'); sm.className = 'topic-summary'; sm.textContent = t.summary; li.appendChild(sm); }
+    ul.appendChild(li);
+  }
+  body.appendChild(ul);
+}
+function renderTodoMdInto(body) {
+  if (todoMdState.loading) { body.appendChild(floatEmpty('Loading…')); return; }
+  if (!todoMdState.found) { body.appendChild(floatEmpty('No TODO.md in this session.')); return; }
+  if (!todoMdState.entries.length) { body.appendChild(floatEmpty('TODO.md is empty.')); return; }
+  for (const e of todoMdState.entries) {
+    const div = document.createElement('div');
+    if (e.kind === 'section') { div.className = 'todomd-section'; div.textContent = e.text; }
+    else if (e.kind === 'item') {
+      div.className = 'todomd-item' + (e.done ? ' done' : '');
+      div.style.paddingLeft = (e.depth * 16) + 'px';
+      div.textContent = (e.done ? '☑ ' : '☐ ') + e.text;
+    } else { div.className = 'todomd-textline'; div.textContent = e.text; }
+    body.appendChild(div);
+  }
+}
+function renderFloat() {
+  if (!floatSource || !floatEl) return;
+  const body = floatEl.querySelector('.float-body');
+  body.innerHTML = '';
+  if (floatSource === 'insession') renderInsessionInto(body);
+  else if (floatSource === 'topics') renderTopicsInto(body);
+  else renderTodoMdInto(body);
+}
+function toggleFloat(source) {
+  if (!focusedId) return;
+  if (floatSource === source) { closeFloat(); return; }
+  if (!floatEl) {
+    floatEl = document.createElement('div');
+    floatEl.className = 'float-panel';
+    floatEl.innerHTML = '<div class="float-head"><span class="float-title"></span>'
+      + '<button class="float-close" title="Close (Esc)">✕</button></div>'
+      + '<div class="float-body"></div>';
+    floatEl.querySelector('.float-close').onclick = closeFloat;
+    contentEl.appendChild(floatEl);
+  }
+  floatSource = source;
+  floatEl.classList.toggle('float-right', source === 'todomd');
+  floatEl.querySelector('.float-title').textContent = FLOAT_TITLES[source] || '';
+  if (source === 'todomd') {
+    todoMdState = { loading: true, found: false, entries: [] };
+    ws.send(JSON.stringify({ type: 'read-todo', id: focusedId }));
+  }
+  renderFloat();
+}
+if (openTodoMdBtn) openTodoMdBtn.onclick = () => toggleFloat('todomd');
+if (openInsessionBtn) openInsessionBtn.onclick = () => toggleFloat('insession');
+if (openTopicsBtn) openTopicsBtn.onclick = () => toggleFloat('topics');
+setFloatButtonsEnabled(false);
+// Esc closes the float first (capture phase) so it wins over other Esc handlers.
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && floatSource) { e.preventDefault(); e.stopPropagation(); closeFloat(); }
+}, true);
 
 
 // Distinct shape per state (not just color); working spins, needs-you pulses.
@@ -333,9 +442,13 @@ ws.addEventListener('message', (ev) => {
   } else if (m.type === 'gui-snapshot' && m.id === focusedId) {
     guiModel = m.model;
     gui.update(guiModel);
+    if (floatSource === 'insession') renderFloat();
   } else if (m.type === 'gui-delta') {
-    if (m.id === focusedId && guiModel) { applyDelta(guiModel, m.ops); gui.update(guiModel); }
+    if (m.id === focusedId && guiModel) { applyDelta(guiModel, m.ops); gui.update(guiModel); if (floatSource === 'insession') renderFloat(); }
     if (m.id === previewId && previewModel) { applyDelta(previewModel, m.ops); window.renderGuiModel(previewBody, previewModel); }
+  } else if (m.type === 'todo-content' && m.id === focusedId) {
+    todoMdState = { loading: false, found: m.found, entries: m.entries || [] };
+    if (floatSource === 'todomd') renderFloat();
   } else if (m.type === 'peeked' && m.id === previewId) {
     previewModel = m.model;
     window.renderGuiModel(previewBody, previewModel);

@@ -66,6 +66,8 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .usage-chip .u-red { color: #f14c4c; }
 .doc-btn { flex: 0 0 auto; background: #2d2d30; color: #bbb; border: 1px solid #3c3c3c; border-radius: 4px; padding: 3px 8px; cursor: pointer; font-size: 12px; }
 .doc-btn:hover { background: #34343a; }
+.doc-btn:disabled { opacity: 0.45; cursor: default; }
+.doc-btn:disabled:hover { background: #2d2d30; }
 #mode-switch { display: flex; gap: 0; flex: 0 0 auto; }
 #mode-switch button { background: #2d2d30; color: #bbb; border: 1px solid #3c3c3c; padding: 4px 12px; cursor: pointer; font-size: 12px; }
 #mode-switch button:first-child { border-radius: 4px 0 0 4px; border-right: none; }
@@ -82,29 +84,27 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .gui-current { color: #4ec9b0; }
 .gui-todoprog { color: #c08a3e; }
 .gui-muted { color: #777; }
-.gui-status .gui-todos { flex-basis: 100%; }
 .gui-todos { list-style: none; margin: 4px 0 0; padding: 0; font-size: 12px; }
 .gui-todos li { padding: 1px 0; color: #bbb; }
 .gui-todos li.todo-completed { color: #5a7d5a; }
 .gui-todos li.todo-in_progress { color: #d0d033; }
-/* The panel header stays in flow; its expanded body (B3) floats as an absolute
-   overlay anchored to the panel, so opening a panel never resizes .gui-log. */
-.gui-todos-panel, .gui-topics-panel { position: relative; flex: 0 0 auto; margin: 6px 12px 0; border: 1px solid #2f2f33; border-radius: 6px; background: #232326; }
-/* z-index keeps every header above every floating body, so a sibling panel's
-   open overlay never swallows the other panel's header click. */
-.panel-head { position: relative; z-index: 30; cursor: pointer; padding: 5px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #9cdcfe; user-select: none; }
-.panel-todos, .panel-topics { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; max-height: 45vh; overflow-y: auto; background: #232326; border: 1px solid #2f2f33; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5); }
-.panel-todos[hidden], .panel-topics[hidden] { display: none; }
-.panel-head:hover { background: #2a2a2e; }
-.panel-caret { display: inline-block; width: 10px; }
-.panel-count { color: #888; }
-.panel-todos { list-style: none; margin: 0; padding: 4px 12px 8px; font-size: 12px; }
-.panel-todos li { padding: 1px 0; color: #bbb; }
-.panel-todos li.todo-completed { color: #5a7d5a; }
-.panel-todos li.todo-in_progress { color: #d0d033; }
-.panel-topics { list-style: none; margin: 0; padding: 4px 12px 8px; font-size: 12px; }
-.panel-topics li { padding: 2px 0; }
-.topic-row { cursor: pointer; display: inline-flex; gap: 6px; align-items: baseline; }
+/* Floating header panels (In-session todo / Topics / TODO.MD) overlay the chat
+   instead of taking layout space. One shared panel; X or Esc closes it. */
+.float-panel { position: absolute; top: 8px; left: 8px; width: min(440px, 60%); max-height: calc(100% - 16px); display: flex; flex-direction: column; z-index: 50; background: #232326; border: 1px solid #3a3a40; border-radius: 6px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); }
+.float-panel.float-right { left: auto; right: 8px; }
+.float-head { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid #2f2f33; }
+.float-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #9cdcfe; }
+.float-close { background: none; border: none; color: #aaa; cursor: pointer; font-size: 13px; line-height: 1; padding: 2px 4px; }
+.float-close:hover { color: #fff; }
+.float-body { overflow-y: auto; padding: 8px 12px; font-size: 12px; }
+.float-empty { color: #777; font-style: italic; }
+.float-topics { list-style: none; margin: 0; padding: 0; }
+.float-topics li { padding: 2px 0; }
+.todomd-section { color: #9cdcfe; font-weight: 600; margin: 8px 0 2px; }
+.todomd-section:first-child { margin-top: 0; }
+.todomd-item { color: #bbb; padding: 1px 0; white-space: pre-wrap; }
+.todomd-item.done { color: #5a7d5a; }
+.todomd-textline { color: #999; padding: 1px 0; white-space: pre-wrap; }
 .topic-code { color: #9cdcfe; cursor: copy; }
 .topic-name { color: #ddd; }
 .topic-dot { font-size: 10px; }

@@ -41,19 +41,6 @@ function renderStatus(el, model) {
     bits.push(`<span class="gui-todoprog">todos ${done}/${st.todos.length}</span>`);
   }
   el.innerHTML = bits.join('') || '<span class="gui-muted">waiting for activity…</span>';
-
-  // Optional todo checklist under the status line.
-  if (Array.isArray(st.todos) && st.todos.length) {
-    const ul = document.createElement('ul');
-    ul.className = 'gui-todos';
-    for (const t of st.todos) {
-      const li = document.createElement('li');
-      li.className = `todo-${esc(t.status)}`;
-      li.textContent = `${TODO_GLYPH[t.status] || '•'} ${t.content}`;
-      ul.appendChild(li);
-    }
-    el.appendChild(ul);
-  }
 }
 
 function itemEl(it) {
@@ -106,15 +93,6 @@ function renderLog(el, model) {
 function mountGui(container, handlers) {
   container.innerHTML =
     '<div class="gui-status"></div>'
-    + '<div class="gui-topics-panel" hidden>'
-    + '<div class="panel-head"><span class="panel-caret">▾</span> Topics <span class="panel-count"></span>'
-    + '<label class="show-resolved"><input type="checkbox"> resolved</label></div>'
-    + '<ul class="panel-topics"></ul>'
-    + '</div>'
-    + '<div class="gui-todos-panel" hidden>'
-    + '<div class="panel-head"><span class="panel-caret">▾</span> Todos <span class="panel-count"></span></div>'
-    + '<ul class="panel-todos"></ul>'
-    + '</div>'
     + '<div class="gui-perm" hidden>'
     + '<div class="perm-head">Permission requested</div>'
     + '<div class="perm-tool"></div>'
@@ -136,74 +114,8 @@ function mountGui(container, handlers) {
   const form = container.querySelector('.gui-compose');
   const editor = form.querySelector('.gui-compose-input');
 
-  // ---- native todos panel (D) ----
-  const todosPanel = container.querySelector('.gui-todos-panel');
-  const todosList = todosPanel.querySelector('.panel-todos');
-  const todosCount = todosPanel.querySelector('.panel-count');
-  let todosCollapsed = false;
-  todosPanel.querySelector('.panel-head').onclick = () => {
-    todosCollapsed = !todosCollapsed;
-    todosList.hidden = todosCollapsed;
-    todosPanel.querySelector('.panel-caret').textContent = todosCollapsed ? '▸' : '▾';
-  };
-  function renderTodosPanel(model) {
-    const todos = (model && model.status && model.status.todos) || null;
-    if (!todos || !todos.length) { todosPanel.hidden = true; return; }
-    todosPanel.hidden = false;
-    const done = todos.filter((t) => t.status === 'completed').length;
-    todosCount.textContent = `(${done}/${todos.length})`;
-    todosList.innerHTML = '';
-    for (const t of todos) {
-      const li = document.createElement('li');
-      li.className = `todo-${esc(t.status)}`;
-      li.textContent = `${TODO_GLYPH[t.status] || '•'} ${t.content}`;
-      todosList.appendChild(li);
-    }
-  }
-
-  // ---- topics panel (B) ----
-  const topicsPanel = container.querySelector('.gui-topics-panel');
-  const topicsList = topicsPanel.querySelector('.panel-topics');
-  const topicsCount = topicsPanel.querySelector('.panel-count');
-  const showResolved = topicsPanel.querySelector('.show-resolved input');
-  let topicsCollapsed = false;
-  let lastTopics = [];
-  topicsPanel.querySelector('.panel-head').onclick = (e) => {
-    if (e.target.closest('.show-resolved')) return; // the checkbox handles itself
-    topicsCollapsed = !topicsCollapsed;
-    topicsList.hidden = topicsCollapsed;
-    topicsPanel.querySelector('.panel-caret').textContent = topicsCollapsed ? '▸' : '▾';
-  };
-  function renderTopicsPanel(topics) {
-    lastTopics = Array.isArray(topics) ? topics : [];
-    if (!lastTopics.length) { topicsPanel.hidden = true; return; }
-    const shown = lastTopics.filter((t) => showResolved.checked || t.status !== 'resolved');
-    topicsPanel.hidden = false;
-    topicsCount.textContent = `(${shown.length})`;
-    topicsList.innerHTML = '';
-    for (const t of shown) {
-      const li = document.createElement('li');
-      li.className = `topic-${esc(t.status)}`;
-      const dot = t.status === 'active' ? '●' : t.status === 'parked' ? '◐' : '○';
-      li.innerHTML = '<span class="topic-row"><span class="topic-code" title="copy code"></span> '
-        + '<span class="topic-name"></span> <span class="topic-dot"></span></span>'
-        + '<div class="topic-summary" hidden></div>';
-      li.querySelector('.topic-code').textContent = t.code || '';
-      li.querySelector('.topic-name').textContent = t.name || '';
-      li.querySelector('.topic-dot').textContent = dot;
-      li.querySelector('.topic-summary').textContent = t.summary || '';
-      li.querySelector('.topic-row').onclick = (e) => {
-        if (e.target.classList.contains('topic-code')) {
-          if (navigator.clipboard) navigator.clipboard.writeText(t.code || '');
-          return;
-        }
-        const sum = li.querySelector('.topic-summary');
-        sum.hidden = !sum.hidden;
-      };
-      topicsList.appendChild(li);
-    }
-  }
-  showResolved.onchange = () => renderTopicsPanel(lastTopics);
+  // Topics + in-session todos now render in app.js's floating header panels
+  // (the In-session todo / Topics / TODO.MD buttons), not in in-pane panels here.
 
   // ---- permission panel ----
   const permEl = container.querySelector('.gui-perm');
@@ -410,7 +322,7 @@ function mountGui(container, handlers) {
   const hidePerm = () => { permEl.hidden = true; };
 
   return {
-    update(model) { renderStatus(statusEl, model); renderLog(logEl, model); renderTodosPanel(model); },
+    update(model) { renderStatus(statusEl, model); renderLog(logEl, model); },
     clear() { statusEl.innerHTML = ''; logEl.innerHTML = ''; hidePerm(); },
     focusCompose() { editor.focus(); },
     // Mirror a native permission prompt. The buttons map to Claude's numbered
@@ -425,7 +337,6 @@ function mountGui(container, handlers) {
       permEl.hidden = false;
     },
     hidePermission() { hidePerm(); },
-    setTopics(topics) { renderTopicsPanel(topics); },
   };
 }
 

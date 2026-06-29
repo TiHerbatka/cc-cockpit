@@ -23,6 +23,8 @@
     <div id="session-head">
       <span id="head-state" class="icon"></span>
       <span id="head-label"></span>
+      <button id="open-insession" class="doc-btn" title="In-session todos (this session's live task list)">In-session todo</button>
+      <button id="open-topics" class="doc-btn" title="Topics tracked for this session">Topics</button>
       <span id="usage-chip" class="usage-chip" title="Context / 5h / 7d usage"></span>
       <button id="interrupt-btn" title="Interrupt (Esc)" hidden>⛔ Stop</button>
       <span id="claude-mode" class="mode-chip" title="Permission mode — click to change">–</span>
@@ -39,7 +41,7 @@
         <option value="max">max</option>
       </select>
       <button id="open-docs" class="doc-btn" title="Open local-docs.md">📄 Docs</button>
-      <button id="open-todo" class="doc-btn" title="Open TODO.md">✓ TODO</button>
+      <button id="open-todomd" class="doc-btn" title="Show TODO.md entries">TODO.MD</button>
     </div>
     <div id="content">
       <div id="gui-pane" hidden></div>

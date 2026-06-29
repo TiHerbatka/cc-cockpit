@@ -10,6 +10,7 @@ const recent = require('./recent');
 const { readTopics } = require('./topics');
 const { findTranscriptPath } = require('./transcript');
 const uploads = require('./uploads');
+const { parseTodoMd } = require('./todomd');
 
 const DEFAULT_PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -219,12 +220,24 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
         const s = registry.get(m.id);
         if (s) openInExplorer(s.cwd);
       } else if (m.type === 'open-file') {
+        // Only local-docs.md now — the old "open TODO.md in the OS app" path was
+        // replaced by the in-cockpit TODO.MD floating panel (read-todo, below).
         const s = registry.get(m.id);
         if (s) {
-          const name = m.which === 'todo' ? 'TODO.md' : 'local-docs.md';
+          const name = 'local-docs.md';
           const file = path.join(s.cwd, name);
           if (fs.existsSync(file)) openFile(file);
           else ws.send(JSON.stringify({ type: 'error', message: `${name} not found in ${s.cwd}` }));
+        }
+      } else if (m.type === 'read-todo') {
+        // Parse the focused session's TODO.md for the in-cockpit TODO.MD panel.
+        // found:false (no error-center noise) when the session has no TODO.md.
+        const s = registry.get(m.id);
+        if (s) {
+          const file = path.join(s.cwd, 'TODO.md');
+          let found = false; let entries = [];
+          try { if (fs.existsSync(file)) { entries = parseTodoMd(fs.readFileSync(file, 'utf8')); found = true; } } catch { /* found stays false */ }
+          ws.send(JSON.stringify({ type: 'todo-content', id: m.id, found, entries }));
         }
       } else if (m.type === 'open-image') {
         const s = registry.get(m.id);
