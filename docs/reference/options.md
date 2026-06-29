@@ -72,7 +72,7 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 **Key facts:**
 - Parent-session markers stripped · `CLAUDECODE`, the entire `CLAUDE_CODE_*` namespace (incl. `CLAUDE_CODE_CHILD_SESSION`), `CLAUDE_EFFORT`, `AI_AGENT` · effect: prevents the no-transcript bug (a child that sees the marker writes no transcript).
 - Auth/provider overrides stripped · `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` · effect: the child can never fall into API-key or alternate-gateway auth, preserving the subscription-only posture.
-- The SDK `env` option replaces (does not merge with) the child env, so the cockpit passes the full scrubbed env; the cockpit's own `CC_COCKPIT_*` namespace is left intact.
+- The SDK `env` option replaces (does not merge with) the child env, so the cockpit passes the full scrubbed env.
 - See `MECH-env-scrub` for the spawn-path mechanism.
 
 **Last verified: 2026-06-29**
@@ -126,7 +126,7 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 **Key facts:**
 - Temp-session auto-title poll · `4000` ms · effect: replaces a temp session's timestamp placeholder label with Claude Code's `aiTitle` once written (runs until each temp session is titled).
 - Topics poll · `1500` ms · effect: re-reads each live session's topics file and pushes it onto the session (feeds the Topics panel / statusline).
-- Transcript tailer tick · `250` ms (default) · effect: how often the incremental transcript tailer reads appended bytes.
-- All three timers are `unref`'d so they never keep the process alive.
+- These are the only two background timers that actually run; both are `unref`'d so they never keep the process alive.
+- The `250` ms is merely the default tick of the incremental transcript tailer helper (`createTailer`), which is NOT instantiated in production: SDK-only means the live conversation comes from the SDK stream, and resume reads the transcript once, synchronously — so no transcript poll runs.
 
 **Last verified: 2026-06-29**

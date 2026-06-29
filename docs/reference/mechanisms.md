@@ -28,6 +28,18 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 
 **Last verified: 2026-06-29**
 
+### MECH-cwd-guard — Missing-cwd pre-flight guard
+
+**What it does:** Before spawning a session (create or resume), the cockpit checks that the working folder still exists on disk; if it doesn't, it returns a truthful "folder no longer exists" error to the GUI instead of letting the SDK child spawn fail.
+
+**Key facts:**
+- Guards both spawn paths: a `create` whose picked folder was removed, and a `resume` whose original cwd is gone.
+- Without it the SDK child spawn fails with ENOENT, which the SDK mislabels as a binary/libc launch failure — the guard surfaces the real cause ("folder no longer exists") instead.
+- The existence check is dependency-injected: a permissive default in the app factory (so the pure server stays unit-testable with synthetic cwds), with the real filesystem check wired in at the production entry point.
+- Role-level location: the WebSocket create/resume handlers, guarded before the registry spawns the driver.
+
+**Last verified: 2026-06-29**
+
 ### MECH-normalize-fold — Conversation normalize fold
 
 **What it does:** A pure, side-effect-free fold turns Claude Code conversation records into the render model the GUI consumes. It exposes two entry points over one shared fold: a stateful live fold that returns delta ops as each SDK message arrives, and a batch seed that returns a full model (used on attach/resume from the on-disk transcript).
@@ -72,7 +84,8 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - Displayed-label precedence: customName (user rename) > autoTitle (Claude Code aiTitle) > folder basename.
 - Custom name and auto-title are in-memory only — lost on server restart/resume.
 - Owns the focused-session id and acknowledgement, the per-session status flags (working / waiting / ended / acknowledged / exited), and a usage-refresh in-flight de-dup guard.
-- Project (non-temp) sessions never receive an aiTitle, so they default to a generated project-scoped name held in the customName slot.
+- Project (non-temp) sessions never receive an aiTitle, so they default to a generated project-scoped name held in the customName slot: `<project> new <N>`, where N is one past the highest existing `<project> new <#>` among current sessions whose customName matches that exact pattern (renamed siblings drop out). Temp / resume / outside-the-projects-root sessions keep the folder-basename default instead.
+- Optimistic user-echo on send: the SDK does not echo streamed user input back as a user message, so on send the registry folds a synthetic user record into the conversation itself and emits the delta — a just-sent turn renders immediately rather than waiting for the SDK to reflect it.
 - Emits `delta`, `meta`, `sessions`, `interaction`, and `session-error`.
 
 **Last verified: 2026-06-29**
@@ -98,6 +111,7 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - A predicate for strictly-inside-the-temp-root classifies a cwd as a temporary session; a separate predicate for anywhere-under-the-projects-root tags discovery results as cockpit vs. global/other.
 - A per-path last-activity lookup returns each path's most-recent activity time, feeding the project picker's time bands and last-used display.
 - Reserved Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9) are excluded as project names.
+- Create-project name validation (`POST /api/projects`) rejects: empty/whitespace, names containing a path separator (`\` or `/`), names containing `..`, the illegal characters `<>:"|?*`, any control character (code < 32), and the reserved device names above; an already-existing project is rejected with HTTP 409. The POST body is capped at 4096 bytes.
 
 **Last verified: 2026-06-29**
 
@@ -129,7 +143,7 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 
 **Key facts:**
 - Gated tools arrive via `canUseTool` and are tagged: AskUserQuestion -> `question`, ExitPlanMode -> `plan`, anything else -> `permission`; MCP elicitation arrives via `onElicitation` -> `elicitation`. Tools the user's loaded settings already allow never reach it.
-- Answers resolve the parked SDK promise per kind: permission allow/deny (allow-always attaches updated permissions); question returns `answers` as a record keyed by question text -> chosen label(s); plan approve / keep-planning (approve-auto also flips the permission mode to acceptEdits); elicitation returns the chosen action or cancel.
+- Answers resolve the parked SDK promise per kind: permission allow/deny (allow-always attaches updated permissions ONLY when the gated tool carried permission suggestions — with none it degrades to a plain one-time allow); question returns `answers` as a record keyed by question text -> chosen label(s); plan approve / keep-planning (approve-auto also flips the permission mode to acceptEdits); elicitation returns the chosen action or cancel.
 - Live control methods: `setPermissionMode(mode)`, `setModel(model)`, effort via the flag-settings layer, `interrupt()` (soft turn interrupt), and an `abortController` whose abort tears the session down (kill).
 - Each control method is defensively guarded — a missing SDK method degrades to a no-op rather than throwing.
 
@@ -149,14 +163,14 @@ Entries are `MECH-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 
 ### MECH-stream-json-shapes — Stream-json message shapes
 
-**What it does:** The SDK speaks the same newline-delimited JSON (stream-json) protocol to its child `claude` over stdio that the raw CLI does; the cockpit consumes those message shapes. These are the captured shapes the normalize fold and the usage/meta logic depend on.
+**What it does:** The SDK speaks the same newline-delimited JSON (stream-json) protocol to its child `claude` over stdio that the raw CLI does. These are the protocol message shapes; only a few of their fields are actually consumed — chiefly `permissionMode`/`model` from `system/init` and `usage` from the terminal `result`. The other fields/messages are documented for context, not because anything reads them.
 
 **Key facts:**
-- `system/init` carries `cwd`, `session_id`, `tools`, `model`, and `permissionMode` (drives the initial mode chip).
-- `assistant` carries a content array (conversation text and tool calls).
-- `rate_limit_event` reports subscription rate-limit status.
-- A terminal `result` carries `subtype`, `is_error`, `result`, `usage`, and `total_cost_usd` (drives the after-turn usage refresh).
-- SessionStart hooks also surface as `system/hook_started` + `system/hook_response`.
+- `system/init` carries `cwd`, `session_id`, `tools`, `model`, and `permissionMode`; of these the cockpit reads only `permissionMode` (drives the initial mode chip) and `model`.
+- `assistant` and `user` messages carry a content array (conversation text and tool calls) — the only messages the normalize fold consumes.
+- A terminal `result` carries `subtype`, `is_error`, `result`, `usage`, and `total_cost_usd`; the cockpit reads `usage`, and the message itself marks the turn idle and triggers an after-turn usage refresh.
+- The 5h / 7d / context numbers come from the experimental `getUsage()` / `getContextUsage()` control calls (see `MECH-usage-windows`), NOT from a `rate_limit_event` message — that event is not handled (it survives only in a code comment).
+- Because the cockpit injects no hooks, the SessionStart hook-lifecycle messages (`system/hook_*`) do not occur.
 - The SDK wraps stream-json rather than replacing it — the same substrate at a higher layer, not a competing option.
 
 **Last verified: 2026-06-29**

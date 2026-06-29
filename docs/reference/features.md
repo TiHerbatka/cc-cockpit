@@ -32,7 +32,7 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 **What it does:** Shows, for every session, which of a few states it is in, so you can tell at a glance which sessions are waiting on you. The state appears as a distinct dot shape in the sidebar and in the focused session's header.
 
 **Key facts:**
-- States and their dots: Working (spinning gear), Needs-you (pulsing triangle — a tool/permission prompt is open), Your-move (steady dot — a background session finished its turn and is waiting), Idle (hollow dot), Exited (✕).
+- States and their dots: Working (spinning gear), Needs-you (pulsing triangle — any gated interaction is open and awaiting your answer: a tool-permission, AskUserQuestion, plan-review, or MCP-elicitation prompt), Your-move (steady dot — a background session finished its turn and is waiting), Idle (hollow dot), Exited (✕).
 - Your-move is the signal that a session you weren't looking at has finished and wants you; focusing that session acknowledges it and clears the signal.
 - The Stop/interrupt control in the header appears only while a session is Working.
 
@@ -167,6 +167,7 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - "In-session todo" shows the focused session's live task list (with status glyphs).
 - "Topics" shows the session's tracked topics (code, name, status dot, and summary).
 - "TODO.MD" fetches and shows the session folder's TODO.md (sections and checkbox items).
+- A fourth header button among the doc-buttons, "📄 Docs", does NOT float a panel: it opens the focused session's `local-docs.md` (in the session cwd) in the OS default app. A missing file yields a "not found" error routed to the error center (see FEAT-error-center).
 - The panel floats over the chat without shrinking it, only one source is open at a time, and it closes with its ✕ or Escape.
 
 **Last verified: 2026-06-29**
@@ -181,5 +182,17 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - A status line summarizes the conversation title, the currently running tool, and todo progress.
 - A "Waiting for Claude…" spinner covers the gap between sending a turn and Claude's first output, clearing on the first response item, a focus change, an interaction prompt, or an error.
 - The log auto-scrolls to the newest item when you're already at the bottom.
+
+**Last verified: 2026-06-29**
+
+### FEAT-error-center — GUI error center
+
+**What it does:** Collects every client-side error into one toggleable list in the sidebar, so problems that would otherwise vanish into the browser console are visible and reviewable inside the cockpit.
+
+**Key facts:**
+- A ⚠ button with an error count sits in the sidebar header, hidden until the first error; clicking it toggles a panel listing every error newest-first.
+- Each entry shows a wall-clock timestamp and, when a stack trace is available, an expandable "stack" button that opens the trace in a modal.
+- Captures window 'error' events, unhandled promise rejections, WebSocket failures ("WebSocket connection error" on error, "WebSocket disconnected" on close), server-pushed errors (shown prefixed "Server: "), and image-upload failures.
+- A new error re-arms an unread pulse on the button unless the panel is already open; the list caps at 200 entries (oldest dropped); a "clear" button empties it.
 
 **Last verified: 2026-06-29**
