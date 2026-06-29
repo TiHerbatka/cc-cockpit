@@ -95,7 +95,7 @@ Entries are `OPT-<slug>`. Format and upkeep rule: see [README.md](./README.md). 
 **Key facts:**
 - `COCKPIT_PROJECTS_ROOT` (env) · default `C:\claude_projects\cockpit` · effect: the root scanned for selectable projects · range: any directory path.
 - Temporary sessions · subfolder `_temporary-sessions` under the projects root · effect: holds each one-off session in its own timestamp-named subfolder; this folder is excluded from the project picker.
-- Role-level location: the projects/discovery layer (`isUnderProjectsRoot` keys discovery off this root).
+- Role-level location: the projects/discovery layer.
 
 **Last verified: 2026-06-29**
 
