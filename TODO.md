@@ -95,3 +95,11 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 - [ ] H6. Verify and, if needed, add file-path wrapping in the compose editor and in chat (revisit what image paste/drag introduced). Also detect quoted paths on paste - Windows auto-quotes copied file paths - and handle/strip the quotes.
 - [x] H7. User message bubbles should use the same width as Claude messages, not a narrower width that wastes vertical space through extra wrapping.
 - [ ] H8. Render Claude output formatting in the GUI (markdown: code blocks, lists, emphasis, etc.). Research what formatting Claude emits in the terminal and support it.
+
+## I. Documentation and project mapping
+- [ ] I1. TPC5 - Brainstorm and design the living documentation system: a maintained current-state reference (features, mechanisms, options and parameters) plus guidelines to keep it current. Treat docs/superpowers as historical changelog, NOT current-state docs (hallucination risk); new docs are the single source of truth.
+  - [ ] I1.1. Decide the docs taxonomy and structure: features, mechanisms, options and parameters.
+  - [ ] I1.2. Define upkeep guidelines plus a mechanism to keep docs current (doc-gate / review step / skill).
+  - [ ] I1.3. Designate docs/superpowers as historical archive; make current-state docs the single source of truth and steer reads away from the changelog.
+- [ ] I2. TPC2 - Build the GUI glossary/mapping skill: re-runnable skill producing a Markdown glossary (areas, features, elements; each with a stable ID plus short handle) and an interactive HTML map with clickable hotspot overlays over seeded multi-state screenshots. Artifacts under /features-gui-mapping. Output excludes code/css/js.
+- [ ] I3. TPC4 - Migrate load-bearing reference from local-docs.md into the new docs, then trim local-docs.md to lean working notes. Migrate: protocol shapes plus env-scrub, SDK process model, binary strategy, guardrails. Remove: PTY-era architecture map and changelog noise. Trim narrative to decisions only.
