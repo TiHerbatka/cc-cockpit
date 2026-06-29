@@ -69,7 +69,8 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 - [ ] E1. Persist session rename across server restart/resume (in-memory only today; needs a {ccSessionId: name} map).
 - [ ] E3. Electron conversion milestone (browser-first now; Electron as a final additive milestone — its own brainstorm/spec/plan/branch).
 - [ ] E4. Harden Windows path matching: make isTemp / isUnderProjectsRoot / lastActivityByPath / projectOf case-insensitive on win32.
-- [ ] E5. Binary strategy and setup-time choice. DECIDED 2026-06-29: cc-cockpit uses the SDK-bundled claude binary (rationale in local-docs.md, section 7). POSSIBLE FEATURE: a one-time setup decision letting the user pick the SDK-bundled binary [default: guaranteed-compatible, may lag, needs an update path] vs their own installed standalone claude [always-latest single-source, but accepts version-divergence risk]. Also required for the bundled path so it does not stall: a test-gated SDK-dependency update path - a startup check for a newer @anthropic-ai/claude-agent-sdk plus one-click update-and-restart. Interacts with E3: Electron packaging needs the bundled binary asar-unpacked; the standalone opt-in would sidestep that.
+- [ ] E5. Binary strategy and setup-time choice. DECIDED 2026-06-29: cc-cockpit uses the SDK-bundled claude binary (rationale in docs/reference/mechanisms.md MECH-binary-strategy). POSSIBLE FEATURE: a one-time setup decision letting the user pick the SDK-bundled binary [default: guaranteed-compatible, may lag, needs an update path] vs their own installed standalone claude [always-latest single-source, but accepts version-divergence risk]. Also required for the bundled path so it does not stall: a test-gated SDK-dependency update path - a startup check for a newer @anthropic-ai/claude-agent-sdk plus one-click update-and-restart. Interacts with E3: Electron packaging needs the bundled binary asar-unpacked; the standalone opt-in would sidestep that.
+- [ ] E6. Remove vestigial hook code: hooks/cockpit-*.ps1 and the CC_COCKPIT_* machinery are dead post-SDK-rearch (the SDK-only cockpit injects no hooks; server/sdk.js passes no --settings). Flagged by the docs-system final review.
 
 ## F. Done (history)
 
@@ -97,9 +98,9 @@ Built on `feat/gui-mode` this session (specs/plans under `docs/superpowers/{spec
 - [ ] H8. Render Claude output formatting in the GUI (markdown: code blocks, lists, emphasis, etc.). Research what formatting Claude emits in the terminal and support it.
 
 ## I. Documentation and project mapping
-- [ ] I1. TPC5 - Brainstorm and design the living documentation system: a maintained current-state reference (features, mechanisms, options and parameters) plus guidelines to keep it current. Treat docs/superpowers as historical changelog, NOT current-state docs (hallucination risk); new docs are the single source of truth.
-  - [ ] I1.1. Decide the docs taxonomy and structure: features, mechanisms, options and parameters.
-  - [ ] I1.2. Define upkeep guidelines plus a mechanism to keep docs current (doc-gate / review step / skill).
-  - [ ] I1.3. Designate docs/superpowers as historical archive; make current-state docs the single source of truth and steer reads away from the changelog.
+- [x] I1. TPC5 - Brainstorm and design the living documentation system: a maintained current-state reference (features, mechanisms, options and parameters) plus guidelines to keep it current. Treat docs/superpowers as historical changelog, NOT current-state docs (hallucination risk); new docs are the single source of truth.
+  - [x] I1.1. Decide the docs taxonomy and structure: features, mechanisms, options and parameters.
+  - [x] I1.2. Define upkeep guidelines plus a mechanism to keep docs current (doc-gate / review step / skill).
+  - [x] I1.3. Designate docs/superpowers as historical archive; make current-state docs the single source of truth and steer reads away from the changelog.
 - [ ] I2. TPC2 - Build the GUI glossary/mapping skill: re-runnable skill producing a Markdown glossary (areas, features, elements; each with a stable ID plus short handle) and an interactive HTML map with clickable hotspot overlays over seeded multi-state screenshots. Artifacts under /features-gui-mapping. Output excludes code/css/js.
-- [ ] I3. TPC4 - Migrate load-bearing reference from local-docs.md into the new docs, then trim local-docs.md to lean working notes. Migrate: protocol shapes plus env-scrub, SDK process model, binary strategy, guardrails. Remove: PTY-era architecture map and changelog noise. Trim narrative to decisions only.
+- [x] I3. TPC4 - Migrate load-bearing reference from local-docs.md into the new docs, then trim local-docs.md to lean working notes. Migrate: protocol shapes plus env-scrub, SDK process model, binary strategy, guardrails. Remove: PTY-era architecture map and changelog noise. Trim narrative to decisions only.
