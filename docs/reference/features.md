@@ -35,7 +35,6 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 - States and their dots: Working (spinning gear), Needs-you (pulsing triangle — a tool/permission prompt is open), Your-move (steady dot — a background session finished its turn and is waiting), Idle (hollow dot), Exited (✕).
 - Your-move is the signal that a session you weren't looking at has finished and wants you; focusing that session acknowledges it and clears the signal.
 - The Stop/interrupt control in the header appears only while a session is Working.
-- State is derived from the live session stream, not from external turn-boundary hooks.
 
 **Last verified: 2026-06-29**
 
@@ -162,7 +161,7 @@ Entries are `FEAT-<slug>`. Format and upkeep rule: see [README.md](./README.md).
 
 ### FEAT-float-panels — Floating todo / topic panels
 
-**What it does:** Provides three header buttons that float a small overlay panel over the conversation for quick reference: this session's in-progress task list, its tracked topics, and the project's TODO.md.
+**What it does:** Provides three header buttons that float a small overlay panel over the conversation for quick reference: this session's in-progress task list, its tracked topics, and the session folder's TODO.md.
 
 **Key facts:**
 - "In-session todo" shows the focused session's live task list (with status glyphs).
