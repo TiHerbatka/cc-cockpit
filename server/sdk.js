@@ -9,8 +9,7 @@
 // model), the raw-message event source, and teardown.
 // Strip the parent Claude Code session's markers so a spawned child launches like
 // a fresh top-level session (else it would treat itself as a nested child and not
-// persist a transcript). The cockpit's own CC_COCKPIT_* vars are a separate
-// namespace. (Relocated here when the PTY substrate was removed — SDK-only.)
+// persist a transcript). (Relocated here when the PTY substrate was removed — SDK-only.)
 function scrubParentClaudeEnv(env) {
   for (const key of Object.keys(env)) {
     if (
