@@ -2,3 +2,5 @@ node_modules/
 public/vendor/
 .playwright-mcp/
 temp/
+# /gui-map skill: the fixture launcher regenerates this canned tree on every run
+features-gui-mapping/tooling/fixture-home/
