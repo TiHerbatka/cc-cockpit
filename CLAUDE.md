@@ -14,7 +14,7 @@ Current state — features, mechanisms, options/parameters — lives in [`docs/r
 
 ## How to resume (in a fresh session opened here)
 
-cc-cockpit is built and runs on the Claude Agent SDK. To run it: `npm install` (first time only) then `npm start`, and open `http://127.0.0.1:4477`. To extend it, the backlog lives in `TODO.md` (managed by the `/todo` skill); the design specs and implementation plans in `docs/superpowers/` remain the reference for how the code is structured and why.
+cc-cockpit is built and runs on the Claude Agent SDK. To run it: `npm install` (first time only) then `npm start`, and open `http://127.0.0.1:4477`. To extend it, the backlog lives in `TODO.md` (managed by the `/todo` skill); the current-state reference (features, mechanisms, options/parameters) lives in `docs/reference/`, while the design specs and implementation plans in `docs/superpowers/` are historical design records — why each feature was built, not how it works now.
 
 ## Common commands
 
