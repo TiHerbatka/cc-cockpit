@@ -63,6 +63,10 @@
         host.remove();
       });
     }
+    // The error panel is a sidebar element (hidden via attribute, not an overlay);
+    // hide it so it doesn't linger over the sidebar in later captures.
+    const ep = document.getElementById('error-panel');
+    if (ep) ep.hidden = true;
     await sleep(120);
   }
 
