@@ -26,7 +26,7 @@ It drives the **real** cockpit GUI fed by **canned fixture data** and **auto-dis
 1. **Start a fresh fixture.** Kill anything already on 4488, then launch in the background:
    `node .claude/skills/gui-map/fixture-server.js`
    Wait for `gui-map fixture listening on http://127.0.0.1:4488`.
-   A fresh process matters: the `main` capture needs all five sidebar status dots, and focusing a `needs-you` session (which the interaction captures do) permanently clears its dot. The capture order already handles this — but only on a clean server.
+   A fresh process matters for clean screenshots. (The capture order — `main` first, interactions last — is now kept only so the `main` screenshot shows the full variety of status dots before the interaction captures focus/clear any; the handle set itself no longer depends on it, since all status values fold to one `status-icon` representative.)
 
 2. **Size + open the browser.** `browser_resize` to 1440×900, then `browser_navigate` to `http://127.0.0.1:4488`.
 
@@ -52,7 +52,8 @@ It drives the **real** cockpit GUI fed by **canned fixture data** and **auto-dis
 8. **Report** the counts to the user (elements per area / total). Because discovery is fully automatic, there is no manual drift step: a re-run simply reflects whatever the live GUI now contains — new elements appear, removed ones drop out.
 
 ## Verifying the result
-- `docs/gui-map.md` lists all areas/elements; it contains **no** selectors/paths/code.
+- `docs/gui-map.md` lists all areas/elements; it contains **no** selectors/paths/code, and **no data/content** (no session names, status strings, message text, counts, or timestamps — only durable element kinds).
+- **Reproducibility (recommended):** before stopping the fixture, capture every state a second time and diff the two `window.__captures` handle lists — they must be **identical** (the transitions-off freeze + marker-based identity make the run deterministic). Any difference signals a residual non-determinism to fix, not ship.
 - Serve and open `docs/gui-map/map.html` over http (the Playwright MCP blocks `file://` — use a quick static server) and confirm: each state screenshot shows aligned hotspots; hover shows name + description; clicking a hotspot scrolls to its glossary entry.
 
 ## Notes
