@@ -1,5 +1,7 @@
 node_modules/
 public/vendor/
+# transient git worktrees used by background agents
+.claude/worktrees/
 .playwright-mcp/
 temp/
 # /gui-map skill: the fixture launcher regenerates this canned tree on every run
