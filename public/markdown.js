@@ -62,20 +62,22 @@ function applyEmphasis(s) {
   return s;
 }
 
-// Inline formatting. Escape first, then split out inline-code spans so their contents
-// are NOT reformatted (no fragile placeholder round-trip — code segments render
-// verbatim while only the in-between segments get emphasis/links).
+// Inline formatting. Escape first, then PROTECT inline-code spans behind runtime
+// sentinels before applying emphasis. The sentinel is a private-use char built via its
+// code (so no literal control byte lives in this source). This shields code contents
+// from emphasis AND — unlike a plain split — lets emphasis span across a code span, so
+// `**use `let` here**` renders as bold including the code (the split approach left the
+// opening/closing `**` in different segments, so it rendered the markers literally).
 function renderInline(raw) {
   const escaped = escapeHtml(raw);
-  const parts = escaped.split(/(`[^`]+`)/g); // capturing split keeps the code spans
-  let out = '';
-  for (const part of parts) {
-    if (part.length >= 2 && part[0] === '`' && part[part.length - 1] === '`') {
-      out += `<code class="md-icode">${part.slice(1, -1)}</code>`; // contents already escaped
-    } else {
-      out += applyEmphasis(part);
-    }
-  }
+  const S = String.fromCharCode(0xE000);
+  const codes = [];
+  const protectedStr = escaped.replace(/`([^`]+)`/g, (_m, c) => {
+    codes.push(c); // already-escaped code content
+    return S + (codes.length - 1) + S;
+  });
+  let out = applyEmphasis(protectedStr);
+  out = out.replace(new RegExp(S + '(\\d+)' + S, 'g'), (_m, i) => `<code class="md-icode">${codes[+i]}</code>`);
   return out;
 }
 

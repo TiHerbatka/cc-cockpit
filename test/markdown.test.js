@@ -24,6 +24,18 @@ test('renderMarkdown: emphasis markers inside inline code are NOT reformatted', 
   assert.equal(renderMarkdown('foo_bar_baz'), '<p class="md-p">foo_bar_baz</p>');
 });
 
+test('renderMarkdown: bold/italic can span an inline-code span', () => {
+  // regression: the previous split-on-code-spans approach left the **…** markers in
+  // different segments, so this rendered the literal asterisks.
+  assert.equal(renderMarkdown('**use `let` here**'),
+    '<p class="md-p"><strong>use <code class="md-icode">let</code> here</strong></p>');
+  assert.equal(renderMarkdown('_wrap `code` in italic_'),
+    '<p class="md-p"><em>wrap <code class="md-icode">code</code> in italic</em></p>');
+  // bold immediately followed by a code span + period (the exact shape Claude emitted)
+  assert.equal(renderMarkdown('**Default to `const`.**'),
+    '<p class="md-p"><strong>Default to <code class="md-icode">const</code>.</strong></p>');
+});
+
 test('renderMarkdown: fenced code block is literal and escaped', () => {
   const html = renderMarkdown('```js\nconst x = 1 < 2 && a > b;\n```');
   assert.equal(html, '<pre class="md-code"><code>const x = 1 &lt; 2 &amp;&amp; a &gt; b;</code></pre>');
