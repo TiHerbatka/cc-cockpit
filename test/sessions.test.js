@@ -561,3 +561,33 @@ test('rename without a renameStorePath (no persistence) still updates the in-mem
   assert.strictEqual(reg.get(s.id).label, 'In-memory Only');
   // No file to check — just confirm no error was thrown.
 });
+
+const initMsg = (session_id) => ({ type: 'system', subtype: 'init', permissionMode: 'default', model: 'm', session_id });
+
+test('E1 fix: init reconciles ccSessionId to the SDK id, so a fresh-session rename survives a resume', () => {
+  const storeFile = tmpRenameFile();
+  const { reg, drivers } = makeRegistryWithStore('C:/root', storeFile);
+  const s = reg.create('C:/root/alpha');
+  const placeholder = s.ccSessionId;
+  assert.strictEqual(placeholder, s.id); // a fresh session starts on the cockpit placeholder id
+  // The SDK reports its real session id (= transcript filename) in the init message.
+  drivers[0]._msg(initMsg('sdk-real-id'));
+  assert.strictEqual(reg.get(s.id).ccSessionId, 'sdk-real-id'); // reconciled to the real id
+  // A rename now persists under the SDK id — the id the Resume picker passes back.
+  reg.rename(s.id, 'My Feature');
+  const persisted = loadRenameMap(storeFile);
+  assert.strictEqual(persisted.get('sdk-real-id'), 'My Feature');
+  assert.strictEqual(persisted.has(placeholder), false); // not stranded under the placeholder
+  // Simulate a later resume in a fresh registry: resuming by the SDK id restores it.
+  const { reg: reg2 } = makeRegistryWithStore('C:/root', storeFile);
+  const resumed = reg2.create('C:/root/alpha', { resumeId: 'sdk-real-id' });
+  assert.strictEqual(reg2.get(resumed.id).label, 'My Feature');
+});
+
+test('E1: init on a resumed session whose id already matches is a no-op reconcile', () => {
+  const { reg, drivers } = makeRegistryWithStore('C:/root', null);
+  const s = reg.create('C:/root/alpha', { resumeId: 'sdk-real-id' });
+  assert.strictEqual(s.ccSessionId, 'sdk-real-id');
+  drivers[0]._msg(initMsg('sdk-real-id'));
+  assert.strictEqual(reg.get(s.id).ccSessionId, 'sdk-real-id'); // unchanged
+});

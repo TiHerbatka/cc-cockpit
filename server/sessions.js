@@ -53,8 +53,12 @@ class SessionRegistry extends EventEmitter {
   create(cwd, opts = {}) {
     const id = crypto.randomUUID();
     const label = path.basename(cwd) || cwd;
-    // The Claude Code session id (used as the SDK resume id and the transcript
-    // filename). Fresh sessions reuse the cockpit id; a resume carries its own.
+    // The Claude Code session id — the SDK resume id and the transcript filename.
+    // A resume carries its own id. A fresh session starts with the cockpit's id as a
+    // placeholder, then reconciles to the SDK's real session id once the init message
+    // arrives (see _onMessage), so a later rename is keyed under the same id the Resume
+    // picker will pass back. Without this reconcile a fresh-session rename never
+    // restores on resume (E1 audit fix).
     const ccSessionId = opts.resumeId || id;
     const driver = this.spawnDriver(cwd, id, { ...opts, ccSessionId });
     const session = {
@@ -100,6 +104,19 @@ class SessionRegistry extends EventEmitter {
     const s = this.sessions.get(id);
     if (!s || s.exited || !msg || !msg.type) return;
     if (msg.type === 'system' && msg.subtype === 'init') {
+      // Reconcile to the SDK's real session id (= transcript filename = the id the
+      // Resume picker later passes back). A fresh session was created under the
+      // cockpit's placeholder id; re-keying to the real id here is what lets a
+      // fresh-session rename survive a resume (E1 audit fix).
+      if (msg.session_id && s.ccSessionId !== msg.session_id) {
+        const placeholder = s.ccSessionId;
+        s.ccSessionId = msg.session_id;
+        if (this.renameMap.has(placeholder)) { // migrate an early (pre-init) rename, if any
+          this.renameMap.set(msg.session_id, this.renameMap.get(placeholder));
+          this.renameMap.delete(placeholder);
+          saveRenameMap(this.renameStorePath, this.renameMap);
+        }
+      }
       const meta = {};
       if (msg.permissionMode) meta.mode = msg.permissionMode;
       if (msg.model) meta.model = msg.model;
