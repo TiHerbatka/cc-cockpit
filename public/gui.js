@@ -80,12 +80,62 @@ function itemEl(it) {
   return div;
 }
 
+// A7 (pure, unit-tested): split the item list into render segments, collapsing any
+// run of 3+ consecutive tool items into one group. Returns an ordered array of
+// { type:'group', items:[...] } | { type:'item', item }. Runs of 1–2 stay inline.
+function groupConsecutiveTools(items) {
+  const arr = items || [];
+  const out = [];
+  let i = 0;
+  while (i < arr.length) {
+    if (arr[i] && arr[i].kind === 'tool') {
+      let j = i;
+      while (j < arr.length && arr[j] && arr[j].kind === 'tool') j++;
+      const run = arr.slice(i, j);
+      if (run.length > 2) out.push({ type: 'group', items: run });
+      else for (const it of run) out.push({ type: 'item', item: it });
+      i = j;
+    } else {
+      out.push({ type: 'item', item: arr[i] });
+      i++;
+    }
+  }
+  return out;
+}
+
+// A7: a run of 3+ back-to-back tool cards collapses into one group. The group is
+// collapsed by default; expanding it reveals the individual tool cards, each still
+// its own expandable card. The left border reflects the worst status in the run
+// (pending > error > ok) so the user can triage without unfolding.
+function toolGroupEl(run) {
+  const errs = run.filter((t) => t.status === 'error').length;
+  const pending = run.some((t) => t.status === 'pending');
+  const cls = pending ? 'tg-pending' : errs ? 'tg-error' : 'tg-ok';
+  const names = [...new Set(run.map((t) => t.name).filter(Boolean))];
+  const namePreview = names.slice(0, 4).join(', ') + (names.length > 4 ? '…' : '');
+  const details = document.createElement('details');
+  details.className = `gui-tool-group ${cls}`;
+  const summary = document.createElement('summary');
+  summary.innerHTML = '<span class="tg-caret"></span>'
+    + `<span class="tg-count">${run.length} tool calls</span>`
+    + (errs ? `<span class="tg-fail">· ${errs} failed</span>` : '')
+    + `<span class="tg-names">${esc(namePreview)}</span>`;
+  details.appendChild(summary);
+  const body = document.createElement('div');
+  body.className = 'gui-tool-group-body';
+  for (const it of run) body.appendChild(itemEl(it));
+  details.appendChild(body);
+  return details;
+}
+
 function renderLog(el, model) {
   const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   el.innerHTML = '';
   const items = (model && model.items) || [];
   const frag = document.createDocumentFragment();
-  for (const it of items) frag.appendChild(itemEl(it));
+  for (const seg of groupConsecutiveTools(items)) {
+    frag.appendChild(seg.type === 'group' ? toolGroupEl(seg.items) : itemEl(seg.item));
+  }
   el.appendChild(frag);
   if (atBottom) el.scrollTop = el.scrollHeight;
 }
@@ -355,5 +405,7 @@ function renderGuiModel(container, model) {
   renderLog(container.querySelector('.gui-log'), model);
 }
 
-window.mountGui = mountGui;
-window.renderGuiModel = renderGuiModel;
+// Dual export (same pattern as compose.js): browser gets globals; node --test can
+// require the pure helpers (groupConsecutiveTools) without a DOM.
+if (typeof module !== 'undefined' && module.exports) module.exports = { groupConsecutiveTools };
+if (typeof window !== 'undefined') { window.mountGui = mountGui; window.renderGuiModel = renderGuiModel; }

@@ -222,13 +222,14 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 **Key facts:**
 - Renders distinct item types: user messages, assistant messages, collapsible thinking blocks, collapsible tool cards, and todo blocks.
 - Tool cards show a short labeled header (e.g. the command or file path), a status dot, and expandable input and output.
+- A run of 3+ back-to-back tool cards is collapsed into a single group (showing the count, any failure count, and the distinct tool names); the group is collapsed by default and its left border reflects the run's worst status (pending > error > ok). Unfolding it reveals the individual tool cards, each still independently expandable. Runs of 1–2 tools stay inline.
 - A status line summarizes the conversation title, the currently running tool, and todo progress.
 - A "Waiting for Claude…" spinner covers the gap between sending a turn and Claude's first output, clearing on the first response item, a focus change, an interaction prompt, or an error.
 - The log auto-scrolls to the newest item when you're already at the bottom.
 
 **Area:** the conversation render in the web client and the normalize fold.
 
-**Last verified: 2026-06-29**
+**Last verified: 2026-06-30**
 
 ### FEAT-error-center — GUI error center
 
