@@ -4,7 +4,8 @@
 //
 // Safety model: ALL source text is HTML-escaped before any markup is constructed, and
 // the only HTML emitted comes from this file's own templates with escaped
-// interpolations. Link hrefs are scheme-checked. So no source text can inject markup.
+// interpolations. Link hrefs are scheme-checked (with control chars stripped first).
+// So no source text can inject markup.
 //
 // Supported: fenced code blocks (```), inline code, bold, italic, strikethrough,
 // headings, unordered/ordered lists, blockquotes, horizontal rules, links, and
@@ -19,12 +20,28 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+// Remove ASCII control characters (codes 0-31, the C0 set incl. tab/newline/CR) and
+// DEL (127). Browsers ignore these when parsing an href, so an embedded control char
+// is used to smuggle a blocked scheme past a naive allowlist. Done via char codes
+// (not a regex literal) so no control byte ever lives in this source file.
+function stripControlChars(s) {
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c > 31 && c !== 127) out += s[i];
+  }
+  return out;
+}
+
 // Allow only safe link schemes; reject javascript:, data:, vbscript:, etc. Relative,
-// anchor, and schemeless URLs pass through.
+// anchor, and schemeless URLs pass through. Control chars are stripped FIRST so
+// "\x01javascript:…" / "java\tscript:…" can't evade the scheme check (XSS hardening).
 function sanitizeUrl(url) {
-  const u = String(url == null ? '' : url).trim();
+  const u = stripControlChars(String(url == null ? '' : url)).trim();
+  if (!u) return '';
+  if (u.startsWith('//')) return ''; // protocol-relative (//host) — unneeded for a local tool
   if (/^(https?:|mailto:|tel:|#|\/|\.\/|\.\.\/)/i.test(u)) return u;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(u)) return ''; // some other explicit scheme -> reject
+  if (/^[a-z][a-z0-9+.-]*:/i.test(u)) return ''; // any other explicit scheme -> reject
   return u; // schemeless / relative
 }
 
@@ -78,8 +95,14 @@ const RE = {
   blank: /^\s*$/,
 };
 
+// Split source into lines, tolerating CRLF: split on LF, then drop a trailing CR (code
+// 13) so the $-anchored block regexes (heading/list) aren't defeated by a stray \r.
+function splitLines(src) {
+  return String(src == null ? '' : src).split('\n').map((l) => (l.charCodeAt(l.length - 1) === 13 ? l.slice(0, -1) : l));
+}
+
 function renderMarkdown(src) {
-  const lines = String(src == null ? '' : src).split('\n');
+  const lines = splitLines(src);
   const out = [];
   let listType = null; // 'ul' | 'ol' | null
   const closeList = () => { if (listType) { out.push('</' + listType + '>'); listType = null; } };

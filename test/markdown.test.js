@@ -77,6 +77,32 @@ test('sanitizeUrl: allows safe schemes, rejects dangerous ones', () => {
   assert.equal(sanitizeUrl('vbscript:x'), '');
 });
 
+test('sanitizeUrl: strips control chars so they cannot smuggle a blocked scheme (XSS)', () => {
+  const SOH = String.fromCharCode(1);   // leading C0 control byte
+  const TAB = String.fromCharCode(9);   // embedded tab
+  const NL = String.fromCharCode(10);   // embedded newline
+  assert.equal(sanitizeUrl(SOH + 'javascript:alert(1)'), '');
+  assert.equal(sanitizeUrl('java' + TAB + 'script:alert(1)'), '');
+  assert.equal(sanitizeUrl('java' + NL + 'script:alert(1)'), '');
+  assert.equal(sanitizeUrl('//evil.com'), '');               // protocol-relative
+  assert.equal(sanitizeUrl('https://ok.com'), 'https://ok.com'); // real link unaffected
+});
+
+test('renderMarkdown: a control-char-smuggled javascript: link emits no anchor', () => {
+  const SOH = String.fromCharCode(1);
+  const html = renderMarkdown('[x](' + SOH + 'javascript:alert(1))');
+  assert.ok(!html.includes('<a'));     // link rejected — no anchor at all
+  assert.ok(!html.includes('href'));   // and no href attribute
+});
+
+test('renderMarkdown: CRLF line endings do not break headings/lists', () => {
+  const CRLF = String.fromCharCode(13) + String.fromCharCode(10);
+  assert.equal(renderMarkdown('# Title' + CRLF + 'body'),
+    '<h1 class="md-h">Title</h1><p class="md-p">body</p>');
+  assert.equal(renderMarkdown('- a' + CRLF + '- b'),
+    '<ul class="md-list"><li>a</li><li>b</li></ul>');
+});
+
 test('renderMarkdown: empty / nullish input', () => {
   assert.equal(renderMarkdown(''), '');
   assert.equal(renderMarkdown(null), '');
