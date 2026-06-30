@@ -108,3 +108,72 @@ test('renderMarkdown: empty / nullish input', () => {
   assert.equal(renderMarkdown(null), '');
   assert.equal(renderMarkdown(undefined), '');
 });
+
+// --- Tables ---
+
+test('renderMarkdown: basic GFM table', () => {
+  const src = '| Name | Age |\n| --- | --- |\n| Bob | 30 |';
+  const html = renderMarkdown(src);
+  assert.ok(html.startsWith('<table class="md-table">'), 'has table element');
+  assert.ok(html.includes('<thead>') && html.includes('<tbody>'), 'has thead and tbody');
+  assert.ok(html.includes('<th>Name</th>') && html.includes('<th>Age</th>'), 'header cells');
+  assert.ok(html.includes('<td>Bob</td>') && html.includes('<td>30</td>'), 'body cells');
+  assert.ok(html.endsWith('</table>'), 'table is closed');
+});
+
+test('renderMarkdown: table with column alignment', () => {
+  const src = '| Left | Center | Right |\n| :--- | :---: | ---: |\n| a | b | c |';
+  const html = renderMarkdown(src);
+  assert.ok(html.includes('<th style="text-align:left">Left</th>'), 'left-aligned header');
+  assert.ok(html.includes('<th style="text-align:center">Center</th>'), 'center-aligned header');
+  assert.ok(html.includes('<th style="text-align:right">Right</th>'), 'right-aligned header');
+  assert.ok(html.includes('<td style="text-align:left">a</td>'), 'alignment on body cell');
+});
+
+test('renderMarkdown: inline formatting inside table cells is rendered and XSS-safe', () => {
+  const src = '| Item | Status |\n| --- | --- |\n| **bold** | `code` |';
+  const html = renderMarkdown(src);
+  assert.ok(html.includes('<strong>bold</strong>'), 'bold in cell');
+  assert.ok(html.includes('<code class="md-icode">code</code>'), 'inline code in cell');
+  // HTML inside a cell must be escaped, not passed through raw
+  const xss = '| head |\n| --- |\n| <script>evil()</script> |';
+  const safe = renderMarkdown(xss);
+  assert.ok(!safe.includes('<script>'), 'script tag not injected');
+  assert.ok(safe.includes('&lt;script&gt;'), 'angle brackets escaped');
+});
+
+test('renderMarkdown: pipe-containing lines without a valid delimiter row are NOT tables', () => {
+  // A lone | line with no following delimiter — must become a paragraph
+  const single = renderMarkdown('hello | world');
+  assert.ok(!single.includes('<table'), 'lone | does not create table');
+  assert.ok(single.includes('<p'), 'falls through to paragraph');
+  // Two pipe rows but the second is not a delimiter row
+  const twoRows = renderMarkdown('| a | b |\n| x | y |');
+  assert.ok(!twoRows.includes('<table'), 'two data rows with no delimiter are not a table');
+});
+
+// --- Nested lists ---
+
+test('renderMarkdown: 2-level nested unordered list', () => {
+  const src = '- a\n  - b\n  - c\n- d';
+  const html = renderMarkdown(src);
+  assert.ok(html.startsWith('<ul class="md-list">'), 'outer ul');
+  assert.ok(html.endsWith('</ul>'), 'outer ul closed');
+  // Inner list must be nested INSIDE the parent <li>, not after it
+  assert.ok(
+    html.includes('<li>a<ul class="md-list"><li>b</li><li>c</li></ul></li>'),
+    'inner ul nested inside parent li'
+  );
+  assert.ok(html.includes('<li>d</li>'), 'sibling after nested block');
+});
+
+test('renderMarkdown: nested ordered list inside unordered list', () => {
+  const src = '- item\n  1. first\n  2. second';
+  const html = renderMarkdown(src);
+  assert.ok(html.includes('<ul class="md-list">'), 'outer ul');
+  assert.ok(html.includes('<ol class="md-list">'), 'inner ol');
+  assert.ok(
+    html.includes('<li>item<ol class="md-list"><li>first</li><li>second</li></ol></li>'),
+    'ol nested inside ul li'
+  );
+});
