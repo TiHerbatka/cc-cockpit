@@ -183,40 +183,25 @@ const MODES = [
 // figures from the registry's usage refresh. Each meta updates only the segment
 // it carries (so a later rate/ctx message never blanks the token segment); the
 // chip re-renders from the whole accumulator. Reset on a focus change (focus()).
-let usageAcc = { tok: null, ctx: null, fiveHour: null, sevenDay: null };
+let usageAcc = window.emptyUsage();
 function resetUsageChip() {
-  usageAcc = { tok: null, ctx: null, fiveHour: null, sevenDay: null };
+  usageAcc = window.emptyUsage();
   if (usageEl) usageEl.textContent = '';
   if (usageBarEl) usageBarEl.hidden = true; // empty chip -> collapse its row (H4)
 }
-const kTok = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
-// Utilization color: <70 green, 70–90 yellow, >=90 red (classes already in CSS).
-const utilClass = (pct) => (pct >= 90 ? 'u-red' : pct >= 70 ? 'u-yellow' : 'u-green');
+// The pure accumulator fold + segment building live in public/usage.js (testable);
+// this only turns the segment descriptors into DOM spans.
 function renderUsageChip() {
   if (!usageEl) return;
   usageEl.textContent = '';
-  const segs = [];
-  if (usageAcc.tok) {
+  const segs = window.usageSegments(usageAcc).map((s) => {
     const span = document.createElement('span');
-    span.textContent = `tok ${kTok(usageAcc.tok.in)}↓ ${kTok(usageAcc.tok.out)}↑`;
-    segs.push(span);
-  }
-  if (usageAcc.ctx) {
-    const span = document.createElement('span');
-    span.textContent = `ctx ${Math.round(usageAcc.ctx.pct)}%`;
-    segs.push(span);
-  }
-  const winSeg = (label, w) => {
-    if (!w) return;
-    const span = document.createElement('span');
-    span.className = utilClass(w.pct);
-    span.textContent = `${label} ${Math.round(w.pct)}%`;
-    if (w.resetsAt) span.title = `resets ${new Date(w.resetsAt).toLocaleString()}`;
-    segs.push(span);
-  };
-  winSeg('5h', usageAcc.fiveHour);
-  winSeg('7d', usageAcc.sevenDay);
-  segs.forEach((s, i) => { if (i) usageEl.append(' · '); usageEl.append(s); });
+    span.textContent = s.text;
+    if (s.cls) span.className = s.cls;
+    if (s.resetsAt) span.title = `resets ${new Date(s.resetsAt).toLocaleString()}`;
+    return span;
+  });
+  segs.forEach((sp, i) => { if (i) usageEl.append(' · '); usageEl.append(sp); });
   // The usage row stays hidden until at least one segment exists (H4).
   if (usageBarEl) usageBarEl.hidden = segs.length === 0;
 }
@@ -227,16 +212,7 @@ function renderMeta(meta) {
   if (meta.mode && claudeModeEl) claudeModeEl.textContent = meta.mode;
   if (meta.model && modelSelect) { for (const o of modelSelect.options) o.selected = (meta.model === o.value || meta.model.startsWith(o.value)); }
   if (meta.effort && effortSelect) { for (const o of effortSelect.options) o.selected = (o.value === meta.effort); }
-  let chipDirty = false;
-  if (meta.usage) {
-    const u = meta.usage;
-    const inTok = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
-    usageAcc.tok = { in: inTok, out: u.output_tokens || 0 };
-    chipDirty = true;
-  }
-  if ('ctx' in meta) { usageAcc.ctx = meta.ctx; chipDirty = true; }
-  if (meta.rate) { usageAcc.fiveHour = meta.rate.fiveHour || null; usageAcc.sevenDay = meta.rate.sevenDay || null; chipDirty = true; }
-  if (chipDirty) renderUsageChip();
+  if (window.foldUsageMeta(usageAcc, meta).changed) renderUsageChip();
 }
 // Interrupt the running turn.
 if (interruptBtn) interruptBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'interrupt', id: focusedId })); };
