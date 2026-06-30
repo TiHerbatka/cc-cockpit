@@ -147,10 +147,11 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 
 ### FEAT-paste-handling — Smart paste in the compose box
 
-**What it does:** Cleans up text pasted into the compose box so common Windows copy patterns land the way you intend.
+**What it does:** Cleans up text pasted into the compose box so common patterns land the way you intend: it strips the quotes Windows adds to copied paths, and collapses a large pasted block into a compact, expandable chip instead of flooding the editor.
 
 **Key facts:**
 - When the entire paste is a single Windows-quoted path (Explorer's "Copy as path" wraps it in double quotes, e.g. `"C:\dir\file.txt"`), the wrapping quotes are stripped so the bare path is inserted. Detection is conservative — only a single token that has no embedded quote and looks like a filesystem path (drive letter, UNC prefix, or any backslash) is unwrapped, so ordinary quoted prose and multiple space-separated quoted paths are left untouched.
+- A large pasted block (more than 8 lines or over 800 characters) is collapsed into a numbered chip ("[Pasted text #1 · N lines]") rather than inserted in full; clicking the chip toggles a read-only preview popup of the block, and on send the chip expands back to its verbatim text. Short pastes insert inline as before.
 
 **Area:** the compose editor's paste handler and the pure paste helpers.
 

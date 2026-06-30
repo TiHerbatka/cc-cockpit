@@ -21,7 +21,9 @@ function stripPastedPathQuotes(text) {
   const looksLikePath = /^[A-Za-z]:[\\/]/.test(inner) || inner.startsWith('\\\\') || inner.includes('\\');
   return looksLikePath ? inner : s;
 }
-// descriptors: Array<{type:'text', text} | {type:'br'} | {type:'token', path}>
+// descriptors: Array<{type:'text', text} | {type:'br'} | {type:'token', path} | {type:'pastedtext', text}>
+// A 'pastedtext' descriptor is a large pasted block that the editor collapsed into a
+// chip (H5); on send it expands back to its verbatim text.
 function serializeDescriptors(descriptors) {
   let out = '';
   for (const d of (descriptors || [])) {
@@ -29,8 +31,30 @@ function serializeDescriptors(descriptors) {
     if (d.type === 'text') out += (d.text || '');
     else if (d.type === 'br') out += '\n';
     else if (d.type === 'token') out += quotePath(d.path);
+    else if (d.type === 'pastedtext') out += (d.text || '');
   }
   return out;
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { quotePath, serializeDescriptors, stripPastedPathQuotes };
-if (typeof window !== 'undefined') { window.quotePath = quotePath; window.serializeDescriptors = serializeDescriptors; window.stripPastedPathQuotes = stripPastedPathQuotes; }
+// H5: decide whether a pasted block is large enough to collapse into a chip rather
+// than inlining it. Long single-line pastes (by chars) and many-line pastes both
+// qualify, so a giant blob doesn't flood the compose box.
+function shouldCollapsePaste(text, opts) {
+  const s = String(text == null ? '' : text);
+  const maxLines = (opts && opts.maxLines) || 8;
+  const maxChars = (opts && opts.maxChars) || 800;
+  return s.split('\n').length > maxLines || s.length > maxChars;
+}
+// H5: short human summary for the collapsed-paste chip / popup header.
+function pasteSummary(text) {
+  const s = String(text == null ? '' : text);
+  const lines = s.split('\n').length;
+  return lines > 1 ? `${lines} lines` : `${s.length} chars`;
+}
+if (typeof module !== 'undefined' && module.exports) module.exports = { quotePath, serializeDescriptors, stripPastedPathQuotes, shouldCollapsePaste, pasteSummary };
+if (typeof window !== 'undefined') {
+  window.quotePath = quotePath;
+  window.serializeDescriptors = serializeDescriptors;
+  window.stripPastedPathQuotes = stripPastedPathQuotes;
+  window.shouldCollapsePaste = shouldCollapsePaste;
+  window.pasteSummary = pasteSummary;
+}

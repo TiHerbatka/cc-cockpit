@@ -274,3 +274,10 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .img-token.dragging { opacity: 0.4; cursor: grabbing; }
 /* Context menu for image tokens (reuses .ctx-item for rows) */
 .img-ctx-menu { position: fixed; z-index: 100; background: #2d2d30; border: 1px solid #3c3c3c; border-radius: 4px; padding: 4px; min-width: 160px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+/* Collapsed-paste chip (H5): a large pasted block shown as a compact placeholder in
+   the editor; clicking it toggles the read-only preview popup below. */
+.paste-token { display: inline-block; background: #3a3320; color: #e2c08d; border: 1px solid #5a4a28; border-radius: 3px; padding: 1px 6px; font-size: 12px; user-select: none; cursor: pointer; vertical-align: middle; white-space: nowrap; }
+.paste-token:hover { background: #463c25; }
+.paste-popup { position: fixed; z-index: 100; max-width: min(680px, 90vw); background: #232326; border: 1px solid #4a4a50; border-radius: 6px; box-shadow: 0 8px 30px rgba(0,0,0,0.6); overflow: hidden; display: flex; flex-direction: column; }
+.paste-popup-head { flex: 0 0 auto; padding: 5px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #e2c08d; border-bottom: 1px solid #3a3a40; }
+.paste-popup-body { margin: 0; padding: 8px 10px; font-family: Consolas, monospace; font-size: 12px; color: #ddd; white-space: pre-wrap; word-break: break-word; max-height: 320px; max-width: 100%; overflow: auto; }

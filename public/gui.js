@@ -176,16 +176,45 @@ function mountGui(container, handlers) {
 
   // ---- Rich compose editor ---------------------------------------------------
   let tokenCounter = 0;
+  let pasteCounter = 0;    // numbers the collapsed-paste chips (H5)
   let imgCtxMenu = null;
   let draggedToken = null; // the .img-token currently being repositioned (A1.7)
+  let pastePopup = null;   // the open collapsed-paste preview popup, if any (H5)
 
   function closeImgCtxMenu() {
     if (imgCtxMenu) { imgCtxMenu.remove(); imgCtxMenu = null; }
   }
 
+  // H5: toggle the read-only preview popup for a collapsed-paste chip. Clicking the
+  // same chip again closes it; clicking a different chip switches to it.
+  function closePastePopup() {
+    if (pastePopup) { pastePopup.remove(); pastePopup = null; }
+  }
+  function togglePastePopup(token) {
+    const wasOpenForThis = pastePopup && pastePopup._token === token;
+    closePastePopup();
+    if (wasOpenForThis) return;
+    const popup = document.createElement('div');
+    popup.className = 'paste-popup';
+    popup._token = token;
+    const head = document.createElement('div');
+    head.className = 'paste-popup-head';
+    head.textContent = `Pasted text — ${window.pasteSummary(token.dataset.text || '')}`;
+    const pre = document.createElement('pre');
+    pre.className = 'paste-popup-body';
+    pre.textContent = token.dataset.text || '';
+    popup.append(head, pre);
+    popup.addEventListener('click', (e) => e.stopPropagation()); // clicking inside keeps it open
+    document.body.appendChild(popup);
+    const rect = token.getBoundingClientRect();
+    popup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - popup.offsetWidth - 8)) + 'px';
+    popup.style.top = Math.min(rect.bottom + 4, window.innerHeight - popup.offsetHeight - 8) + 'px';
+    pastePopup = popup;
+  }
+
   // Walk the editor's DOM and produce a flat descriptor array.
   // text node → {type:'text'}, BR → {type:'br'}, .img-token → {type:'token'},
-  // DIV/P block wrapper → {type:'br'} then recurse children.
+  // .paste-token → {type:'pastedtext'}, DIV/P block wrapper → {type:'br'} then recurse.
   function collectDescriptors(node) {
     const out = [];
     for (const child of node.childNodes) {
@@ -195,6 +224,8 @@ function mountGui(container, handlers) {
         out.push({ type: 'br' });
       } else if (child.nodeType === 1 && child.classList.contains('img-token')) {
         out.push({ type: 'token', path: child.dataset.path });
+      } else if (child.nodeType === 1 && child.classList.contains('paste-token')) {
+        out.push({ type: 'pastedtext', text: child.dataset.text || '' });
       } else if (child.nodeName === 'DIV' || child.nodeName === 'P') {
         out.push({ type: 'br' });
         out.push(...collectDescriptors(child));
@@ -205,7 +236,32 @@ function mountGui(container, handlers) {
     return out;
   }
 
-  // Insert an image token span + trailing space at the current caret inside editor.
+  // Insert an inline non-editable node + a trailing space at the current caret
+  // inside the editor (shared by the image token and the collapsed-paste chip).
+  function insertInlineAtCaret(node) {
+    const space = document.createTextNode(' ');
+    const sel = window.getSelection();
+    const inEditor = sel && sel.rangeCount && editor.contains(sel.getRangeAt(0).commonAncestorContainer);
+    if (inEditor) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(node);
+      const r2 = document.createRange();
+      r2.setStartAfter(node);
+      r2.collapse(true);
+      r2.insertNode(space);
+      r2.setStartAfter(space);
+      r2.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r2);
+    } else {
+      editor.appendChild(node);
+      editor.appendChild(space);
+    }
+    editor.focus();
+  }
+
+  // Insert an image token span at the current caret inside editor.
   function insertTokenAtCaret(path, name) {
     tokenCounter += 1;
     const span = document.createElement('span');
@@ -215,26 +271,21 @@ function mountGui(container, handlers) {
     span.dataset.path = path;
     span.title = name || path;
     span.textContent = '[Image #' + tokenCounter + ']';
-    const space = document.createTextNode(' ');
-    const sel = window.getSelection();
-    const inEditor = sel && sel.rangeCount && editor.contains(sel.getRangeAt(0).commonAncestorContainer);
-    if (inEditor) {
-      const range = sel.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(span);
-      const r2 = document.createRange();
-      r2.setStartAfter(span);
-      r2.collapse(true);
-      r2.insertNode(space);
-      r2.setStartAfter(space);
-      r2.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(r2);
-    } else {
-      editor.appendChild(span);
-      editor.appendChild(space);
-    }
-    editor.focus();
+    insertInlineAtCaret(span);
+  }
+
+  // H5: insert a collapsed-paste chip standing in for a large pasted block. The full
+  // text rides on the chip's dataset (expanded back on send via collectDescriptors);
+  // clicking the chip toggles a read-only popup preview.
+  function insertPasteTokenAtCaret(text) {
+    pasteCounter += 1;
+    const span = document.createElement('span');
+    span.className = 'paste-token';
+    span.contentEditable = 'false';
+    span.dataset.text = text;
+    span.title = 'Pasted text — click to expand/collapse';
+    span.textContent = `[Pasted text #${pasteCounter} · ${window.pasteSummary(text)}]`;
+    insertInlineAtCaret(span);
   }
 
   // Upload a File/Blob via handlers.onUpload, then insert a token at savedRange.
@@ -273,8 +324,16 @@ function mountGui(container, handlers) {
     handlers.onSend(text);
     editor.innerHTML = '';
     tokenCounter = 0;
+    pasteCounter = 0;
+    closePastePopup();
   };
   form.addEventListener('submit', (e) => { e.preventDefault(); submit(); });
+  // Clicking a collapsed-paste chip toggles its preview popup (stop propagation so
+  // the document-level click handler doesn't immediately close it again) — H5.
+  editor.addEventListener('click', (e) => {
+    const token = e.target && e.target.closest && e.target.closest('.paste-token');
+    if (token && editor.contains(token)) { e.preventDefault(); e.stopPropagation(); togglePastePopup(token); }
+  });
   editor.addEventListener('keydown', (e) => {
     // Don't treat an IME composition's confirming Enter (isComposing / keyCode 229)
     // as a submit — that would send the turn mid-composition.
@@ -295,7 +354,10 @@ function mountGui(container, handlers) {
     }
     // Strip the wrapping quotes Windows "Copy as path" adds to a single path (H6).
     const plain = window.stripPastedPathQuotes(e.clipboardData.getData('text/plain'));
-    document.execCommand('insertText', false, plain);
+    // Collapse a large pasted block into an expandable chip instead of flooding the
+    // editor with the whole blob (H5); ordinary short pastes insert inline.
+    if (window.shouldCollapsePaste(plain)) insertPasteTokenAtCaret(plain);
+    else document.execCommand('insertText', false, plain);
   });
   // Start repositioning an existing token within the editor (A1.7).
   editor.addEventListener('dragstart', (e) => {
@@ -370,14 +432,14 @@ function mountGui(container, handlers) {
     menu.style.top = Math.min(e.clientY, window.innerHeight - rect.height - 4) + 'px';
     imgCtxMenu = menu;
   });
-  document.addEventListener('click', closeImgCtxMenu);
-  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeImgCtxMenu(); });
+  document.addEventListener('click', () => { closeImgCtxMenu(); closePastePopup(); });
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { closeImgCtxMenu(); closePastePopup(); } });
 
   const hidePerm = () => { permEl.hidden = true; };
 
   return {
     update(model) { renderStatus(statusEl, model); renderLog(logEl, model); },
-    clear() { statusEl.innerHTML = ''; logEl.innerHTML = ''; hidePerm(); waitEl.hidden = true; },
+    clear() { statusEl.innerHTML = ''; logEl.innerHTML = ''; hidePerm(); waitEl.hidden = true; closePastePopup(); },
     focusCompose() { editor.focus(); },
     // Show/hide the "Waiting for Claude…" spinner shown between a send and Claude's
     // first output of the turn (H3). Driven by app.js's awaitingResponse logic.

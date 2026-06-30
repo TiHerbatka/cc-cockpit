@@ -138,12 +138,12 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 
 **Key facts:**
 - `POST /api/upload-image` takes `{ id, mime, name, dataBase64 }`, validates the image mime and a 25 MB decoded cap, writes into `<session cwd>/uploaded-images/`, and returns `{ path, name }`.
-- The compose box holds descriptors (`text` / `br` / `token{path}`); serialization turns each token into the file's absolute path, quoted when it contains whitespace, so Claude receives the image as a path reference in the prompt text.
+- The compose box holds descriptors (`text` / `br` / `token{path}` / `pastedtext{text}`); serialization turns each image token into the file's absolute path (quoted when it contains whitespace) and each `pastedtext` chip back into its verbatim block, so Claude receives the image as a path reference and the collapsed paste as its full text. (The `pastedtext` collapse is a compose-box convenience — see `FEAT-paste-handling`.)
 - Filenames are sanitized, collisions are de-duplicated, and an auto timestamp name is used when none is supplied.
 
 **Area:** the image-upload endpoint and the compose serialization.
 
-**Last verified: 2026-06-29**
+**Last verified: 2026-06-30**
 
 ### MECH-topics — Per-session topics file feed
 

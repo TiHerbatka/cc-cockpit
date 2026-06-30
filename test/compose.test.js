@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { quotePath, serializeDescriptors, stripPastedPathQuotes } = require('../public/compose');
+const { quotePath, serializeDescriptors, stripPastedPathQuotes, shouldCollapsePaste, pasteSummary } = require('../public/compose');
 
 test('quotePath quotes paths containing whitespace, leaves others bare', () => {
   assert.equal(quotePath('C:\\a\\b.png'), 'C:\\a\\b.png');
@@ -39,4 +39,32 @@ test('stripPastedPathQuotes leaves non-path / multi-token / unquoted text untouc
   assert.equal(stripPastedPathQuotes('"just text"'), '"just text"');
   assert.equal(stripPastedPathQuotes(''), '');
   assert.equal(stripPastedPathQuotes(null), '');
+});
+
+test('serializeDescriptors expands a pastedtext descriptor verbatim', () => {
+  assert.equal(serializeDescriptors([
+    { type: 'text', text: 'before ' },
+    { type: 'pastedtext', text: 'line1\nline2\nline3' },
+    { type: 'text', text: ' after' },
+  ]), 'before line1\nline2\nline3 after');
+  assert.equal(serializeDescriptors([{ type: 'pastedtext', text: '' }]), '');
+  assert.equal(serializeDescriptors([{ type: 'pastedtext' }]), '');
+});
+
+test('shouldCollapsePaste: long-by-lines or long-by-chars collapse; short stays inline', () => {
+  assert.equal(shouldCollapsePaste('one line'), false);
+  assert.equal(shouldCollapsePaste('a\nb\nc'), false);                 // 3 lines, short
+  assert.equal(shouldCollapsePaste(Array(20).fill('x').join('\n')), true); // 20 lines
+  assert.equal(shouldCollapsePaste('x'.repeat(801)), true);            // long single line
+  assert.equal(shouldCollapsePaste('x'.repeat(800)), false);          // exactly at the char limit
+  assert.equal(shouldCollapsePaste('a\nb\nc', { maxLines: 2 }), true); // custom threshold
+  assert.equal(shouldCollapsePaste(''), false);
+  assert.equal(shouldCollapsePaste(null), false);
+});
+
+test('pasteSummary: multi-line reports lines, single line reports chars', () => {
+  assert.equal(pasteSummary('a\nb\nc'), '3 lines');
+  assert.equal(pasteSummary('hello'), '5 chars');
+  assert.equal(pasteSummary(''), '0 chars');
+  assert.equal(pasteSummary(null), '0 chars');
 });
