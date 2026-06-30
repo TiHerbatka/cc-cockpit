@@ -97,7 +97,7 @@ Built on `feat/gui-mode` this session:
 - [x] H5. Collapse long pasted user text (beyond a character/line threshold) into a compact placeholder like the Claude terminal, with click to expand/collapse.
 - [x] H6. Verify and, if needed, add file-path wrapping in the compose editor and in chat (revisit what image paste/drag introduced). Also detect quoted paths on paste - Windows auto-quotes copied file paths - and handle/strip the quotes.
 - [x] H7. User message bubbles should use the same width as Claude messages, not a narrower width that wastes vertical space through extra wrapping.
-- [ ] H8. Render Claude output formatting in the GUI (markdown: code blocks, lists, emphasis, etc.). Research what formatting Claude emits in the terminal and support it.
+- [x] H8. Render Claude output formatting in the GUI (markdown: code blocks, lists, emphasis, etc.). Research what formatting Claude emits in the terminal and support it.
 
 ## I. Documentation and project mapping
 - [x] I1. TPC5 - Brainstorm and design the living documentation system: a maintained current-state reference (features, mechanisms, options and parameters) plus guidelines to keep it current. Treat the old design docs as a historical changelog, NOT current-state docs (hallucination risk); new docs are the single source of truth.
