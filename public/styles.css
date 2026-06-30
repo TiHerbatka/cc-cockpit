@@ -60,6 +60,11 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 #interrupt-btn { flex: 0 0 auto; background: #5a2d2d; color: #fff; border: none; border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
 #interrupt-btn:hover { background: #7a3a3a; }
 #interrupt-btn[hidden] { display: none; }
+/* Usage readout lives on its own thin row directly below the header (H4), so the
+   header button cluster stays uncluttered. The row hides entirely until there is
+   usage data to show (toggled from app.js's renderUsageChip/resetUsageChip). */
+#usage-bar { flex: 0 0 auto; padding: 2px 10px; background: #252526; border-bottom: 1px solid #333; }
+#usage-bar[hidden] { display: none; }
 .usage-chip { flex: 0 0 auto; font-size: 11px; color: #bbb; white-space: nowrap; }
 .usage-chip .u-green { color: #4ec9b0; }
 .usage-chip .u-yellow { color: #e2c08d; }

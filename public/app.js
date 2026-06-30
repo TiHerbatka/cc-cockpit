@@ -165,6 +165,7 @@ function updateHead() {
 const claudeModeEl = document.getElementById('claude-mode');
 const interruptBtn = document.getElementById('interrupt-btn');
 const usageEl = document.getElementById('usage-chip');
+const usageBarEl = document.getElementById('usage-bar');
 const modelSelect = document.getElementById('model-select');
 const effortSelect = document.getElementById('effort-select');
 // All six permission modes, each with a one-line explanation shown as a hover
@@ -186,6 +187,7 @@ let usageAcc = { tok: null, ctx: null, fiveHour: null, sevenDay: null };
 function resetUsageChip() {
   usageAcc = { tok: null, ctx: null, fiveHour: null, sevenDay: null };
   if (usageEl) usageEl.textContent = '';
+  if (usageBarEl) usageBarEl.hidden = true; // empty chip -> collapse its row (H4)
 }
 const kTok = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
 // Utilization color: <70 green, 70–90 yellow, >=90 red (classes already in CSS).
@@ -215,6 +217,8 @@ function renderUsageChip() {
   winSeg('5h', usageAcc.fiveHour);
   winSeg('7d', usageAcc.sevenDay);
   segs.forEach((s, i) => { if (i) usageEl.append(' · '); usageEl.append(s); });
+  // The usage row stays hidden until at least one segment exists (H4).
+  if (usageBarEl) usageBarEl.hidden = segs.length === 0;
 }
 // Mode chip from the init message's permission mode; tokens from result.usage;
 // rolling-window/context from the usage refresh; model from init/setModel. All

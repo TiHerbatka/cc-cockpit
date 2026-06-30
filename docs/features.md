@@ -162,16 +162,17 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 
 ### FEAT-usage-chip — Usage chip
 
-**What it does:** Shows a compact usage readout in the focused session's header — recent token counts plus how much of your rolling rate-limit windows and the model's context window are used.
+**What it does:** Shows a compact usage readout on its own thin row directly below the focused session's header — recent token counts plus how much of your rolling rate-limit windows and the model's context window are used. The row sits on its own line (rather than amid the header buttons) so the header stays uncluttered.
 
 **Key facts:**
 - Segments shown: per-turn tokens (in ↓ / out ↑), context-window percent, and the 5-hour and 7-day rolling-window percents.
 - The window segments are color-coded by utilization (green under 70%, yellow 70–90%, red at/above 90%) and carry a "resets at" tooltip.
 - The chip is per-session and resets when you switch sessions; each incoming figure updates only its own segment.
+- The whole row is hidden until there is at least one segment to show (no empty strip), and collapses again on a session switch.
 
-**Area:** the header usage chip and the usage-window computation.
+**Area:** the usage row below the header and the usage-window computation.
 
-**Last verified: 2026-06-29**
+**Last verified: 2026-06-30**
 
 ### FEAT-header-controls — Header controls (model, effort, permission mode, stop)
 
