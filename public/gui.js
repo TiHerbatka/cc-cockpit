@@ -43,7 +43,19 @@ function renderStatus(el, model) {
   el.innerHTML = bits.join('') || '<span class="gui-muted">waiting for activity…</span>';
 }
 
-function itemEl(it) {
+// Persist a <details>'s open/closed state across full re-renders. The log rebuilds
+// its innerHTML on every delta, which would otherwise snap shut any card/group the
+// user just opened; keyed by a stable id, an expanded element stays open when a new
+// token or message arrives. `openKeys` is a Set owned per render target.
+function wireDetails(details, key, openKeys) {
+  if (!details || !key || !openKeys) return;
+  if (openKeys.has(key)) details.open = true; // restore before listening (set first)
+  details.addEventListener('toggle', () => {
+    if (details.open) openKeys.add(key); else openKeys.delete(key);
+  });
+}
+
+function itemEl(it, openKeys) {
   const div = document.createElement('div');
   if (it.kind === 'user') {
     div.className = 'gui-user';
@@ -76,6 +88,7 @@ function itemEl(it) {
       + `<pre class="tool-in"></pre><pre class="tool-out"></pre></details>`;
     div.querySelector('.tool-in').textContent = JSON.stringify(it.input, null, 2);
     div.querySelector('.tool-out').textContent = it.resultText == null ? '' : it.resultText;
+    if (it.id != null) wireDetails(div.querySelector('details'), 'tool:' + it.id, openKeys);
   } else {
     div.className = 'gui-unknown';
     div.textContent = '';
@@ -110,7 +123,7 @@ function groupConsecutiveTools(items) {
 // collapsed by default; expanding it reveals the individual tool cards, each still
 // its own expandable card. The left border reflects the worst status in the run
 // (pending > error > ok) so the user can triage without unfolding.
-function toolGroupEl(run) {
+function toolGroupEl(run, openKeys) {
   const errs = run.filter((t) => t.status === 'error').length;
   const pending = run.some((t) => t.status === 'pending');
   const cls = pending ? 'tg-pending' : errs ? 'tg-error' : 'tg-ok';
@@ -126,18 +139,20 @@ function toolGroupEl(run) {
   details.appendChild(summary);
   const body = document.createElement('div');
   body.className = 'gui-tool-group-body';
-  for (const it of run) body.appendChild(itemEl(it));
+  for (const it of run) body.appendChild(itemEl(it, openKeys));
   details.appendChild(body);
+  // Key the group by its first tool's id so it stays open as the run grows (A7 + open-state).
+  if (run[0] && run[0].id != null) wireDetails(details, 'group:' + run[0].id, openKeys);
   return details;
 }
 
-function renderLog(el, model) {
+function renderLog(el, model, openKeys) {
   const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   el.innerHTML = '';
   const items = (model && model.items) || [];
   const frag = document.createDocumentFragment();
   for (const seg of groupConsecutiveTools(items)) {
-    frag.appendChild(seg.type === 'group' ? toolGroupEl(seg.items) : itemEl(seg.item));
+    frag.appendChild(seg.type === 'group' ? toolGroupEl(seg.items, openKeys) : itemEl(seg.item, openKeys));
   }
   el.appendChild(frag);
   if (atBottom) el.scrollTop = el.scrollHeight;
@@ -168,6 +183,10 @@ function mountGui(container, handlers) {
   const waitEl = container.querySelector('.gui-waiting');
   const form = container.querySelector('.gui-compose');
   const editor = form.querySelector('.gui-compose-input');
+  // Open/closed state of expandable tool cards/groups, kept across re-renders so a
+  // card the user is reading isn't snapped shut by a new streaming token (reset on
+  // session switch — see clear()).
+  const openKeys = new Set();
 
   // Topics + in-session todos now render in app.js's floating header panels
   // (the In-session todo / Topics / TODO.MD buttons), not in in-pane panels here.
@@ -441,8 +460,8 @@ function mountGui(container, handlers) {
   const hidePerm = () => { permEl.hidden = true; };
 
   return {
-    update(model) { renderStatus(statusEl, model); renderLog(logEl, model); },
-    clear() { statusEl.innerHTML = ''; logEl.innerHTML = ''; hidePerm(); waitEl.hidden = true; closePastePopup(); },
+    update(model) { renderStatus(statusEl, model); renderLog(logEl, model, openKeys); },
+    clear() { statusEl.innerHTML = ''; logEl.innerHTML = ''; hidePerm(); waitEl.hidden = true; closePastePopup(); openKeys.clear(); },
     focusCompose() { editor.focus(); },
     // Show/hide the "Waiting for Claude…" spinner shown between a send and Claude's
     // first output of the turn (H3). Driven by app.js's awaitingResponse logic.
@@ -465,9 +484,12 @@ function mountGui(container, handlers) {
 // Read-only render of a model into a container (for the quick preview): reuses the
 // status + log renderers; no compose box or side panels.
 function renderGuiModel(container, model) {
-  container.innerHTML = '<div class="gui-status"></div><div class="gui-log"></div>';
+  container.innerHTML = '<div class="gui-status"></div>' + '<div class="gui-log"></div>';
+  // The preview re-renders fully on every delta too; keep open-state on the (stable)
+  // container so an expanded card/group stays open here as well.
+  const openKeys = container._openKeys || (container._openKeys = new Set());
   renderStatus(container.querySelector('.gui-status'), model);
-  renderLog(container.querySelector('.gui-log'), model);
+  renderLog(container.querySelector('.gui-log'), model, openKeys);
 }
 
 // Dual export (same pattern as compose.js): browser gets globals; node --test can
