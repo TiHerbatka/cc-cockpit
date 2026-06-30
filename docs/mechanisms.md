@@ -145,6 +145,20 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 
 **Last verified: 2026-06-30**
 
+### MECH-markdown-render — Assistant Markdown rendering
+
+**What it does:** Converts each assistant message's text to HTML for the conversation log using a small, dependency-free Markdown renderer, so Claude's formatting (code, lists, emphasis, etc.) shows the way it does in the terminal.
+
+**Key facts:**
+- Safety is escape-first: the source text is fully HTML-escaped before any markup is constructed, and the only HTML emitted comes from the renderer's own templates with escaped interpolations — so no assistant text can inject live markup. Link hrefs are scheme-checked (only `http(s)`, `mailto`, `tel`, anchor, and relative URLs are allowed; `javascript:`/`data:`/other schemes are dropped to plain text).
+- Inline code spans are split out before emphasis is applied, so markers inside backticks aren't reformatted; `_` emphasis ignores `snake_case`.
+- A block parser handles fenced code blocks (literal, escaped; an unclosed fence still renders, which keeps mid-stream output stable), headings, ordered/unordered lists, blockquotes, and horizontal rules; within a paragraph single newlines become `<br>`.
+- Only assistant messages are rendered as Markdown; user messages stay plain text. The renderer is a pure, unit-tested module reused by the read-only quick preview.
+
+**Area:** the Markdown renderer and the assistant-message branch of the conversation render.
+
+**Last verified: 2026-06-30**
+
 ### MECH-topics — Per-session topics file feed
 
 **What it does:** The cockpit reads the assistant's per-session topic-tracker file and pushes it onto the session, so the floating Topics panel (and the statusline) can display the active threads of work.

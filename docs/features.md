@@ -222,6 +222,7 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 
 **Key facts:**
 - Renders distinct item types: user messages, assistant messages, collapsible thinking blocks, collapsible tool cards, and todo blocks.
+- Assistant messages are rendered as Markdown — fenced and inline code, bold/italic/strikethrough, headings, ordered/unordered lists, blockquotes, horizontal rules, and links (single newlines become line breaks). Rendering is XSS-safe (all text is HTML-escaped before any markup is built, and link schemes are sanitized). User messages stay plain text.
 - Tool cards show a short labeled header (e.g. the command or file path), a status dot, and expandable input and output.
 - A run of 3+ back-to-back tool cards is collapsed into a single group (showing the count, any failure count, and the distinct tool names); the group is collapsed by default and its left border reflects the run's worst status (pending > error > ok). Unfolding it reveals the individual tool cards, each still independently expandable. Runs of 1–2 tools stay inline.
 - A status line summarizes the conversation title, the currently running tool, and todo progress.

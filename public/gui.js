@@ -50,7 +50,10 @@ function itemEl(it) {
     div.textContent = it.text;
   } else if (it.kind === 'assistant') {
     div.className = 'gui-asst';
-    div.textContent = it.text; // textContent preserves text safely; CSS keeps newlines
+    // Render Claude's markdown (H8). renderMarkdown is XSS-safe (escapes first); fall
+    // back to plain text if the module somehow didn't load.
+    if (window.renderMarkdown) div.innerHTML = window.renderMarkdown(it.text);
+    else div.textContent = it.text;
   } else if (it.kind === 'thinking') {
     div.className = 'gui-think';
     div.innerHTML = `<details><summary>thinking</summary><div></div></details>`;
