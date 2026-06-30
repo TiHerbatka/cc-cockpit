@@ -2,7 +2,7 @@
 
 A map of the cockpit GUI surface, **auto-discovered from the live GUI** by the `/gui-map` skill — **do not edit by hand** (a re-run overwrites it). Element handles and names are derived mechanically from the DOM, so they are functional rather than carefully worded. Every area/element is keyed by a `GUI-<AREA>-<slug>` handle for cross-reference.
 
-**Last generated: 2026-06-29**
+**Last generated: 2026-06-30**
 
 Visual map (hover/click hotspots): [gui-map/map.html](gui-map/map.html).
 
@@ -118,15 +118,6 @@ The "In-session todos (this session's live task list)" button.
 ### GUI-HEADER-topics-tracked-for-this-session — Topics tracked for this session
 The "Topics tracked for this session" button.
 
-### GUI-HEADER-context-5h-7d-usage — Context / 5h / 7d usage
-The "Context / 5h / 7d usage" element.
-
-### GUI-HEADER-5h-42 — 5h 42%
-The "5h 42%" element.
-
-### GUI-HEADER-7d-18 — 7d 18%
-The "7d 18%" element.
-
 ### GUI-HEADER-permission-mode-click-to-change — Permission mode — click to change
 The "Permission mode — click to change" element.
 
@@ -189,8 +180,8 @@ The "○ Apply the dark theme on load" element.
 ### GUI-CONV-grep-readfilesync — ⚙︎ Grep readFileSync
 The "⚙︎ Grep readFileSync" element.
 
-### GUI-CONV-gui-asst — Gui Asst
-The "Gui Asst" element.
+### GUI-CONV-md-p — Md P
+The "Md P" element.
 
 ### GUI-CONV-refactor-the-scanner-now — Refactor the scanner now.
 The "Refactor the scanner now." element.
