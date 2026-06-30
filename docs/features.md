@@ -152,8 +152,9 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 **Key facts:**
 - When the entire paste is a single Windows-quoted path (Explorer's "Copy as path" wraps it in double quotes, e.g. `"C:\dir\file.txt"`), the wrapping quotes are stripped so the bare path is inserted. Detection is conservative — only a single token that has no embedded quote and looks like a filesystem path (drive letter, UNC prefix, or any backslash) is unwrapped, so ordinary quoted prose and multiple space-separated quoted paths are left untouched.
 - A large pasted block (more than 8 lines or over 800 characters) is collapsed into a numbered chip ("[Pasted text #1 · N lines]") rather than inserted in full; clicking the chip toggles a read-only preview popup of the block, and on send the chip expands back to its verbatim text. Short pastes insert inline as before.
+- Long file paths wrap rather than overflow in both the compose editor and the chat log: the editor, user/assistant messages, and tool-output blocks all carry `word-break: break-word`, so a long unbroken path breaks onto the next line. (Verified — no dedicated path-wrapping code is needed beyond these rules.)
 
-**Area:** the compose editor's paste handler and the pure paste helpers.
+**Area:** the compose editor's paste handler, the pure paste helpers, and the word-break rules on the compose/chat surfaces.
 
 **Last verified: 2026-06-30**
 

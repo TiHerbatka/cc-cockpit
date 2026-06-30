@@ -42,7 +42,7 @@ Built on `feat/gui-mode` this session:
   - [ ] A5.1. Cockpit tracks the multi-agent Workflow running inside a session (if technically feasible to observe it from the SDK stream / session state) - detect that a workflow is active and follow its phase and per-agent progress.
   - [ ] A5.2. Session view renders the active workflow live details (phases, running/parallel agents, counts, progress) that the terminal workflow view normally shows - so the user does not have to drop to a terminal to watch it.
 - [ ] A6. Ability for the user to view sub-agents in the session - surface sub-agents (Agent/Task spawns) running inside a session in the cockpit GUI, so the user can see and inspect them without dropping to a terminal.
-- [ ] A7. Collapse runs of consecutive tool-use cards in the conversation: when more than 2 tool uses occur back-to-back, group them into a single collapsed entry; the user unfolds the group to reveal the individual tool cards, each still individually expandable/clickable exactly as today.
+- [x] A7. Collapse runs of consecutive tool-use cards in the conversation: when more than 2 tool uses occur back-to-back, group them into a single collapsed entry; the user unfolds the group to reveal the individual tool cards, each still individually expandable/clickable exactly as today.
 - [x] A8. [TOP PRIORITY 1/3] Documentation structure & conventions (no scripts): local-docs.md as the general-info entry point/index; docs/ holds the detailed docs; a docs/README.md guide defines handles + entry format + freshness/anti-staleness convention; CLAUDE.md upkeep guidelines. Human- and Claude-readable.
 - [x] A9. [TOP PRIORITY 2/3] Rework docs/reference/ (superpowers-era) into the new docs/ structure (features/mechanisms/options/overview), adjusted to the new documentation conventions; update CLAUDE.md + code pointers; remove docs/reference/.
 - [x] A10. [TOP PRIORITY 3/3] gui-map skill: auto-detect new GUI elements from the documentation (not the hand-curated manifest); treat the generated glossary/map as documentation within the docs structure; relocate the gui-map mechanism files (fixture/probe/build/manifest) into .claude/skills/gui-map/.
@@ -93,9 +93,9 @@ Built on `feat/gui-mode` this session:
   - [x] H1.2. Floating-panel font size can match the chat font size.
 - [x] H2. Make the session status icon bigger - at the current size you cannot tell which state it depicts without zooming in.
 - [x] H3. After the user sends a prompt, show a small spinner / waiting-for-Claude indicator until Claude starts responding.
-- [ ] H4. Improve usage-stats visibility - it looks cluttered among the header buttons; consider moving the usage chip to its own row.
-- [ ] H5. Collapse long pasted user text (beyond a character/line threshold) into a compact placeholder like the Claude terminal, with click to expand/collapse.
-- [ ] H6. Verify and, if needed, add file-path wrapping in the compose editor and in chat (revisit what image paste/drag introduced). Also detect quoted paths on paste - Windows auto-quotes copied file paths - and handle/strip the quotes.
+- [x] H4. Improve usage-stats visibility - it looks cluttered among the header buttons; consider moving the usage chip to its own row.
+- [x] H5. Collapse long pasted user text (beyond a character/line threshold) into a compact placeholder like the Claude terminal, with click to expand/collapse.
+- [x] H6. Verify and, if needed, add file-path wrapping in the compose editor and in chat (revisit what image paste/drag introduced). Also detect quoted paths on paste - Windows auto-quotes copied file paths - and handle/strip the quotes.
 - [x] H7. User message bubbles should use the same width as Claude messages, not a narrower width that wastes vertical space through extra wrapping.
 - [ ] H8. Render Claude output formatting in the GUI (markdown: code blocks, lists, emphasis, etc.). Research what formatting Claude emits in the terminal and support it.
 
