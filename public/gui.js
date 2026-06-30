@@ -243,7 +243,9 @@ function mountGui(container, handlers) {
       uploadAndInsert(imgItem.getAsFile(), savedRange);
       return;
     }
-    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+    // Strip the wrapping quotes Windows "Copy as path" adds to a single path (H6).
+    const plain = window.stripPastedPathQuotes(e.clipboardData.getData('text/plain'));
+    document.execCommand('insertText', false, plain);
   });
   // Start repositioning an existing token within the editor (A1.7).
   editor.addEventListener('dragstart', (e) => {

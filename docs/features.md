@@ -145,6 +145,17 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 
 **Last verified: 2026-06-29**
 
+### FEAT-paste-handling — Smart paste in the compose box
+
+**What it does:** Cleans up text pasted into the compose box so common Windows copy patterns land the way you intend.
+
+**Key facts:**
+- When the entire paste is a single Windows-quoted path (Explorer's "Copy as path" wraps it in double quotes, e.g. `"C:\dir\file.txt"`), the wrapping quotes are stripped so the bare path is inserted. Detection is conservative — only a single token that has no embedded quote and looks like a filesystem path (drive letter, UNC prefix, or any backslash) is unwrapped, so ordinary quoted prose and multiple space-separated quoted paths are left untouched.
+
+**Area:** the compose editor's paste handler and the pure paste helpers.
+
+**Last verified: 2026-06-30**
+
 ### FEAT-interaction-modal — Blocking interaction modal
 
 **What it does:** Surfaces every "Claude is waiting on you" moment as one blocking modal over the focused session's conversation, with the right controls for the kind of request, so you can answer it inline.

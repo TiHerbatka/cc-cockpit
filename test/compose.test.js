@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { quotePath, serializeDescriptors } = require('../public/compose');
+const { quotePath, serializeDescriptors, stripPastedPathQuotes } = require('../public/compose');
 
 test('quotePath quotes paths containing whitespace, leaves others bare', () => {
   assert.equal(quotePath('C:\\a\\b.png'), 'C:\\a\\b.png');
@@ -21,4 +21,22 @@ test('serializeDescriptors: text + br->\\n + token->quoted path, in order', () =
   assert.equal(serializeDescriptors([
     { type: 'token', path: '/p/one.png' }, { type: 'text', text: ' and ' }, { type: 'token', path: '/p/two.png' },
   ]), '/p/one.png and /p/two.png');
+});
+
+test('stripPastedPathQuotes unwraps a single quoted Windows path', () => {
+  // Drive-letter paths (with and without spaces), UNC, and bare-backslash paths strip.
+  assert.equal(stripPastedPathQuotes('"C:\\dir\\file.txt"'), 'C:\\dir\\file.txt');
+  assert.equal(stripPastedPathQuotes('"C:\\my docs\\a b.png"'), 'C:\\my docs\\a b.png');
+  assert.equal(stripPastedPathQuotes('"\\\\server\\share\\f.txt"'), '\\\\server\\share\\f.txt');
+  assert.equal(stripPastedPathQuotes('"C:/dir/file.txt"'), 'C:/dir/file.txt');
+  assert.equal(stripPastedPathQuotes('  "C:\\dir\\file.txt"  '), 'C:\\dir\\file.txt'); // surrounding whitespace trimmed
+});
+
+test('stripPastedPathQuotes leaves non-path / multi-token / unquoted text untouched', () => {
+  assert.equal(stripPastedPathQuotes('"hello world"'), '"hello world"');       // quoted prose, not a path
+  assert.equal(stripPastedPathQuotes('C:\\dir\\file.txt'), 'C:\\dir\\file.txt'); // no wrapping quotes
+  assert.equal(stripPastedPathQuotes('"C:\\a.txt" "C:\\b.txt"'), '"C:\\a.txt" "C:\\b.txt"'); // multiple quoted paths
+  assert.equal(stripPastedPathQuotes('"just text"'), '"just text"');
+  assert.equal(stripPastedPathQuotes(''), '');
+  assert.equal(stripPastedPathQuotes(null), '');
 });
