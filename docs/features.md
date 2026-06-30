@@ -135,7 +135,7 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 **What it does:** Lets you put images into a message: paste an image from the clipboard or drag an image file into the compose box, and it is uploaded and represented as an inline image token in the message you send.
 
 **Key facts:**
-- Pasting an image, or dropping an image file, uploads it and inserts a labeled image token (e.g. "[Image #1]") at the caret.
+- Pasting or dropping one or more images uploads each and inserts a labeled image token (e.g. "[Image #1]") at the caret; a single paste/drop carrying several images attaches them all, in order.
 - Tokens can be dragged to reposition them within the message before sending.
 - Right-clicking a token offers "Open in default app" to view the image.
 - On send, each token is serialized into the message as the uploaded file's path (quoted if it contains spaces).
@@ -223,7 +223,7 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 
 **Key facts:**
 - Renders distinct item types: user messages, assistant messages, collapsible thinking blocks, collapsible tool cards, and todo blocks.
-- Assistant messages are rendered as Markdown — fenced and inline code, bold/italic/strikethrough, headings, ordered/unordered lists, blockquotes, horizontal rules, and links (single newlines become line breaks). Rendering is XSS-safe (all text is HTML-escaped before any markup is built, and link schemes are sanitized). User messages stay plain text.
+- Assistant messages are rendered as Markdown — fenced and inline code, bold/italic/strikethrough, headings, ordered/unordered lists (with multi-level nesting), GitHub-flavored pipe tables (with column alignment), blockquotes, horizontal rules, and links (single newlines become line breaks). Rendering is XSS-safe (all text is HTML-escaped before any markup is built, and link schemes are sanitized). User messages stay plain text.
 - Tool cards show a short labeled header (e.g. the command or file path), a status dot, and expandable input and output.
 - A run of 3+ back-to-back tool cards is collapsed into a single group (showing the count, any failure count, and the distinct tool names); the group is collapsed by default and its left border reflects the run's worst status (pending > error > ok). Unfolding it reveals the individual tool cards, each still independently expandable. Runs of 1–2 tools stay inline.
 - Expand/collapse state of tool cards and tool groups is **remembered across re-renders**: the log rebuilds on every streaming delta, but a card or group you've opened (or collapsed) stays that way as new tokens/messages arrive, so reading one isn't interrupted. State is keyed by the tool's stable id and reset on a session switch.

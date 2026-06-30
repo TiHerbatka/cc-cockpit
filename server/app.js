@@ -93,8 +93,13 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
     }
 
     if (req.method === 'POST' && urlPath === '/api/upload-image') {
+      // Cap the request body while receiving so a runaway stream can't exhaust memory.
+      // base64 of the decoded cap plus the small JSON wrapper stays well under 2x
+      // MAX_BYTES; mirrors the /api/projects guard. (The post-decode MAX_BYTES check
+      // below still enforces the real image-size limit.)
+      const bodyCap = uploads.MAX_BYTES * 2;
       let body = '';
-      req.on('data', (c) => { body += c; });
+      req.on('data', (c) => { body += c; if (body.length > bodyCap) req.destroy(); });
       req.on('end', () => {
         const fail = (code, error) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error })); };
         let m; try { m = JSON.parse(body); } catch { return fail(400, 'bad json'); }

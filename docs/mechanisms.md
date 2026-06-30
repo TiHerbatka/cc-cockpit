@@ -151,7 +151,7 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 **What it does:** Pasted or uploaded images are POSTed to the server, decoded and written into the session's own upload folder, and the saved file path is inlined into the submitted prompt as a quoted path token.
 
 **Key facts:**
-- `POST /api/upload-image` takes `{ id, mime, name, dataBase64 }`, validates the image mime and a 25 MB decoded cap, writes into `<session cwd>/uploaded-images/`, and returns `{ path, name }`.
+- `POST /api/upload-image` takes `{ id, mime, name, dataBase64 }`, validates the image mime and a 25 MB decoded cap, writes into `<session cwd>/uploaded-images/`, and returns `{ path, name }`. The raw request body is also capped *while being received* (≈2× the decoded limit, enough for the base64 + JSON wrapper) and the connection is dropped past that, so an oversized stream can't buffer unbounded in memory before the decoded-size check runs.
 - The compose box holds descriptors (`text` / `br` / `token{path}` / `pastedtext{text}`); serialization turns each image token into the file's absolute path (quoted when it contains whitespace) and each `pastedtext` chip back into its verbatim block, so Claude receives the image as a path reference and the collapsed paste as its full text. (The `pastedtext` collapse is a compose-box convenience — see `FEAT-paste-handling`.)
 - Filenames are sanitized, collisions are de-duplicated, and an auto timestamp name is used when none is supplied.
 

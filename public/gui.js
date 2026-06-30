@@ -161,17 +161,6 @@ function renderLog(el, model, openKeys) {
 function mountGui(container, handlers) {
   container.innerHTML =
     '<div class="gui-status"></div>'
-    + '<div class="gui-perm" hidden>'
-    + '<div class="perm-head">Permission requested</div>'
-    + '<div class="perm-tool"></div>'
-    + '<pre class="perm-input"></pre>'
-    + '<div class="perm-actions">'
-    + '<button class="perm-allow">Allow once</button>'
-    + '<button class="perm-remember">Allow, don\'t ask again</button>'
-    + '<button class="perm-deny">Deny</button>'
-    + '</div>'
-    + '<div class="perm-hint">Allow once, allow &amp; remember, or deny this tool.</div>'
-    + '</div>'
     + '<div class="gui-log"></div>'
     + '<div class="gui-waiting" hidden><span class="gui-spinner"></span>Waiting for Claude…</div>'
     + '<form class="gui-compose">'
@@ -190,11 +179,6 @@ function mountGui(container, handlers) {
 
   // Topics + in-session todos now render in app.js's floating header panels
   // (the In-session todo / Topics / TODO.MD buttons), not in in-pane panels here.
-
-  // ---- permission panel ----
-  const permEl = container.querySelector('.gui-perm');
-  const permTool = permEl.querySelector('.perm-tool');
-  const permInput = permEl.querySelector('.perm-input');
 
   // ---- Rich compose editor ---------------------------------------------------
   let tokenCounter = 0;
@@ -364,14 +348,25 @@ function mountGui(container, handlers) {
     if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) { e.preventDefault(); submit(); }
     else if (e.key === 'Enter' && (e.shiftKey || e.ctrlKey)) { e.preventDefault(); document.execCommand('insertLineBreak'); }
   });
+  // Upload + insert several images in order — a single paste/drop can carry many
+  // (A1.5 follow-up). Each insert advances the caret, so the next lands after it.
+  async function uploadAndInsertMany(files, savedRange) {
+    let range = savedRange;
+    for (const f of files) {
+      if (!f) continue;
+      await uploadAndInsert(f, range);
+      const sel = window.getSelection();
+      range = (sel && sel.rangeCount) ? sel.getRangeAt(0).cloneRange() : range;
+    }
+  }
   editor.addEventListener('paste', (e) => {
     e.preventDefault();
     const items = [...(e.clipboardData.items || [])];
-    const imgItem = items.find((it) => it.type.startsWith('image/'));
-    if (imgItem) {
+    const imgFiles = items.filter((it) => it.type.startsWith('image/')).map((it) => it.getAsFile());
+    if (imgFiles.length) {
       const sel = window.getSelection();
       const savedRange = (sel && sel.rangeCount) ? sel.getRangeAt(0).cloneRange() : null;
-      uploadAndInsert(imgItem.getAsFile(), savedRange);
+      uploadAndInsertMany(imgFiles, savedRange);
       return;
     }
     // Strip the wrapping quotes Windows "Copy as path" adds to a single path (H6).
@@ -429,12 +424,12 @@ function mountGui(container, handlers) {
 
     // External image-file drop — upload then insert a token at the drop caret.
     const files = [...(e.dataTransfer.files || [])];
-    const imgFile = files.find((f) => f.type.startsWith('image/'));
-    if (!imgFile) return;
+    const imgFiles = files.filter((f) => f.type.startsWith('image/'));
+    if (!imgFiles.length) return;
     if (dropRange) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(dropRange); }
     const sel = window.getSelection();
     const savedRange = (sel && sel.rangeCount) ? sel.getRangeAt(0).cloneRange() : null;
-    uploadAndInsert(imgFile, savedRange);
+    uploadAndInsertMany(imgFiles, savedRange);
   });
   editor.addEventListener('contextmenu', (e) => {
     const token = e.target.closest('.img-token');
@@ -457,27 +452,13 @@ function mountGui(container, handlers) {
   document.addEventListener('click', () => { closeImgCtxMenu(); closePastePopup(); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { closeImgCtxMenu(); closePastePopup(); } });
 
-  const hidePerm = () => { permEl.hidden = true; };
-
   return {
     update(model) { renderStatus(statusEl, model); renderLog(logEl, model, openKeys); },
-    clear() { statusEl.innerHTML = ''; logEl.innerHTML = ''; hidePerm(); waitEl.hidden = true; closePastePopup(); openKeys.clear(); },
+    clear() { statusEl.innerHTML = ''; logEl.innerHTML = ''; waitEl.hidden = true; closePastePopup(); openKeys.clear(); },
     focusCompose() { editor.focus(); },
     // Show/hide the "Waiting for Claude…" spinner shown between a send and Claude's
     // first output of the turn (H3). Driven by app.js's awaitingResponse logic.
     setWaiting(on) { waitEl.hidden = !on; },
-    // Mirror a native permission prompt. The buttons map to Claude's numbered
-    // options (1=Allow, 2=Allow+don't-ask, 3=Deny); onAnswer sends the keystroke.
-    showPermission(req, onAnswer) {
-      permTool.innerHTML = req.toolName ? `Claude wants to use <b>${esc(req.toolName)}</b>` : 'Claude is requesting permission';
-      permInput.textContent = req.input == null ? '' : truncate(JSON.stringify(req.input, null, 2), 2000);
-      const answer = (decision) => { onAnswer(decision); hidePerm(); };
-      permEl.querySelector('.perm-allow').onclick = () => answer('allow');
-      permEl.querySelector('.perm-remember').onclick = () => answer('allow-always');
-      permEl.querySelector('.perm-deny').onclick = () => answer('deny');
-      permEl.hidden = false;
-    },
-    hidePermission() { hidePerm(); },
   };
 }
 
