@@ -318,11 +318,21 @@ class SessionRegistry extends EventEmitter {
   }
 
   // First path segment under projectsRoot, or null (root itself / outside / no root).
+  // Containment check is case-insensitive on win32 so drive-letter or segment
+  // casing differences (e.g. D:\Foo vs d:\foo) don't cause false "outside" results.
+  // The returned name is extracted from the original cwd (preserving its casing).
   projectOf(cwd) {
     if (!this.projectsRoot || !cwd) return null;
-    const rel = path.relative(this.projectsRoot, cwd);
+    // Use normalized keys for the containment check only.
+    const rel = path.relative(
+      projects.normalizePathKey(this.projectsRoot),
+      projects.normalizePathKey(cwd)
+    );
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
-    return rel.split(/[\\/]/)[0];
+    // Extract the actual first segment from the original cwd so casing is preserved.
+    const rootDepth = this.projectsRoot.replace(/[/\\]+$/, '').split(/[/\\]/).length;
+    const cwdParts = cwd.replace(/[/\\]+$/, '').split(/[/\\]/);
+    return cwdParts[rootDepth] || null;
   }
 
   // B5 auto-name for a fresh project session: "<project> new <N>", where N is one

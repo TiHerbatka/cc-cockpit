@@ -6,6 +6,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { normalizePathKey } = require('./projects');
 
 const WINDOW_MS = { day: 24 * 3600e3, '3d': 72 * 3600e3, week: 7 * 24 * 3600e3, all: Infinity };
 
@@ -139,7 +140,10 @@ function cwdOf(file) {
 function lastActivityByPath(paths, { claudeDir = defaultClaudeDir() } = {}) {
   const out = new Map();
   if (!paths || !paths.length) return out;
-  const norm = paths.map((p) => ({ p, n: path.resolve(p) }));
+  // Normalize comparison keys for case-insensitive matching on win32: two paths
+  // that differ only in drive-letter or segment casing (e.g. D:\Foo vs d:\foo)
+  // must count as the same project. The original path `p` is kept as the map key.
+  const norm = paths.map((p) => ({ p, n: normalizePathKey(path.resolve(p)) }));
   const projectsDir = path.join(claudeDir, 'projects');
   let projectDirs;
   try { projectDirs = fs.readdirSync(projectsDir, { withFileTypes: true }).filter((d) => d.isDirectory()); }
@@ -154,7 +158,7 @@ function lastActivityByPath(paths, { claudeDir = defaultClaudeDir() } = {}) {
       if (!st.isFile()) continue;
       const cwd = cwdOf(full);
       if (!cwd) continue;
-      const c = path.resolve(cwd);
+      const c = normalizePathKey(path.resolve(cwd));
       for (const { p, n } of norm) {
         const rel = path.relative(n, c);
         const under = rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));

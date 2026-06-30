@@ -132,6 +132,19 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 
 **Last verified: 2026-06-29**
 
+### MECH-win32-path-matching — Case-insensitive path matching on Windows
+
+**What it does:** Makes the path comparisons that classify and group sessions case-insensitive on Windows (where the filesystem is), while leaving them case-sensitive on POSIX — so two paths that differ only in drive-letter or segment casing (e.g. `D:\Foo` vs `d:\foo`) count as the same location instead of falsely missing.
+
+**Key facts:**
+- A single helper lowercases a path for comparison **only on win32** (gated on the platform; tests pass the platform explicitly to exercise both branches). It normalizes **comparison keys only** — the stored and displayed paths are never mutated.
+- Used by the temp-root check, the under-projects-root check, the per-path last-activity lookup (which still keys its result map by the original path), and the project-of lookup.
+- The project-of lookup does its containment test on normalized keys but extracts the returned project-name segment from the **original** cwd, so the project name keeps its real on-disk casing.
+
+**Area:** the path predicates in the projects/discovery layer and the registry's project-of lookup.
+
+**Last verified: 2026-06-30**
+
 ### MECH-uploads — Image upload + prompt-token serialization
 
 **What it does:** Pasted or uploaded images are POSTed to the server, decoded and written into the session's own upload folder, and the saved file path is inlined into the submitted prompt as a quoted path token.

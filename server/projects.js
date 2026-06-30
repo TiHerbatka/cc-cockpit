@@ -4,6 +4,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+// Normalize a resolved path for case-insensitive key/comparison on win32 only.
+// On Windows, NTFS is case-insensitive; on POSIX the file system is case-sensitive.
+// Pass `platform` explicitly only in tests to override process.platform.
+function normalizePathKey(p, platform = process.platform) {
+  return platform === 'win32' ? p.toLowerCase() : p;
+}
+
 const DEFAULT_ROOT = 'C:\\claude_projects\\cockpit';
 // One directory under the projects root holds all temporary (one-off) sessions,
 // each in its own subfolder. It is NOT a selectable project.
@@ -23,17 +30,20 @@ function tempRoot(root = projectsRoot()) {
 }
 
 // True if cwd is (strictly) inside the temp root — i.e. a temporary session.
+// Comparison is case-insensitive on win32 to handle drive-letter or segment
+// casing differences (e.g. D:\Foo vs d:\foo) without false misses.
 function isTemp(cwd, root = projectsRoot()) {
   if (!cwd) return false;
-  const rel = path.relative(tempRoot(root), cwd);
+  const rel = path.relative(normalizePathKey(tempRoot(root)), normalizePathKey(cwd));
   return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
 // True if cwd is inside the cockpit projects root (any depth) — used to tell
 // cockpit-managed sessions apart from legacy/other sessions in discovery.
+// Comparison is case-insensitive on win32 (see isTemp).
 function isUnderProjectsRoot(cwd, root = projectsRoot()) {
   if (!cwd) return false;
-  const rel = path.relative(root, cwd);
+  const rel = path.relative(normalizePathKey(root), normalizePathKey(cwd));
   return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
@@ -90,4 +100,4 @@ function createProject(name, root = projectsRoot()) {
   return { name: v.name, path: dir };
 }
 
-module.exports = { projectsRoot, tempRoot, isTemp, isUnderProjectsRoot, createTempSession, validateName, listProjects, createProject, TEMP_DIR_NAME };
+module.exports = { projectsRoot, tempRoot, isTemp, isUnderProjectsRoot, createTempSession, validateName, listProjects, createProject, TEMP_DIR_NAME, normalizePathKey };

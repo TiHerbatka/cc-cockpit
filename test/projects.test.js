@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { validateName, listProjects, createProject, tempRoot, isTemp, isUnderProjectsRoot, createTempSession, TEMP_DIR_NAME } = require('../server/projects');
+const { validateName, listProjects, createProject, tempRoot, isTemp, isUnderProjectsRoot, createTempSession, TEMP_DIR_NAME, normalizePathKey } = require('../server/projects');
 
 function tmpRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cockpit-proj-'));
@@ -82,4 +82,38 @@ test('isUnderProjectsRoot is true for cockpit projects and temp, false outside',
   assert.strictEqual(isUnderProjectsRoot(path.join(tempRoot(root), 'sess-1'), root), true);
   assert.strictEqual(isUnderProjectsRoot(root, root), false);
   assert.strictEqual(isUnderProjectsRoot('C:/elsewhere/x', root), false);
+});
+
+// --- E4: Windows path matching (case-insensitive on win32, case-sensitive elsewhere) ---
+
+test('normalizePathKey lowercases on win32 and preserves case on non-win32', () => {
+  assert.strictEqual(normalizePathKey('C:\\Foo\\BAR', 'win32'), 'c:\\foo\\bar');
+  assert.strictEqual(normalizePathKey('C:\\Foo\\BAR', 'linux'), 'C:\\Foo\\BAR');
+  assert.strictEqual(normalizePathKey('/Foo/BAR', 'win32'), '/foo/bar');
+  assert.strictEqual(normalizePathKey('/Foo/BAR', 'darwin'), '/Foo/BAR');
+});
+
+test('isTemp is true when cwd matches temp root with different casing (win32 only)', () => {
+  const root = tmpRoot();
+  const t = tempRoot(root);
+  // Exact match (always works)
+  assert.strictEqual(isTemp(path.join(t, 'sess-1'), root), true);
+  // On win32, differing casing of the temp root prefix must still match.
+  if (process.platform === 'win32') {
+    const upperCwd = path.join(t, 'sess-1').toUpperCase();
+    assert.strictEqual(isTemp(upperCwd, root), true, 'upper-cased cwd should still match on win32');
+    const lowerCwd = path.join(t, 'sess-2').toLowerCase();
+    assert.strictEqual(isTemp(lowerCwd, root), true, 'lower-cased cwd should still match on win32');
+  }
+});
+
+test('isUnderProjectsRoot is true when cwd matches with different casing (win32 only)', () => {
+  const root = tmpRoot();
+  if (process.platform === 'win32') {
+    const upperCwd = path.join(root, 'MyProject').toUpperCase();
+    assert.strictEqual(isUnderProjectsRoot(upperCwd, root), true, 'upper-cased cwd should match on win32');
+    const lowerRoot = root.toLowerCase();
+    const normalCwd = path.join(root, 'MyProject');
+    assert.strictEqual(isUnderProjectsRoot(normalCwd, lowerRoot), true, 'lower-cased root should match on win32');
+  }
 });

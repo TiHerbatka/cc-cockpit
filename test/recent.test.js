@@ -74,3 +74,14 @@ test('lastActivityByPath returns the latest session activity per project path', 
   assert.strictEqual(m.get('C:\\proj\\a'), new Date(NOW - 3600e3).toISOString()); // newest of the two
   assert.strictEqual(m.has('C:\\proj\\nope'), false);                            // no sessions -> absent
 });
+
+// E4: case-insensitive path matching on win32
+test('lastActivityByPath matches sessions regardless of path casing on win32', () => {
+  if (process.platform !== 'win32') return; // case-sensitive platforms skip this
+  const claudeDir = fixture();
+  // The transcript records cwd as 'C:\\proj\\a'. Query with differently-cased paths.
+  const upper = lastActivityByPath(['C:\\PROJ\\A'], { claudeDir });
+  assert.ok(upper.has('C:\\PROJ\\A'), 'upper-cased query path should still find the session');
+  const lower = lastActivityByPath(['c:\\proj\\a'], { claudeDir });
+  assert.ok(lower.has('c:\\proj\\a'), 'lower-cased query path should still find the session');
+});

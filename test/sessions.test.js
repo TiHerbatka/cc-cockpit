@@ -289,6 +289,17 @@ test('projectOf returns the first segment under the projects root, else null', (
   assert.strictEqual(reg.projectOf('C:/elsewhere/x'), null);
 });
 
+// E4: projectOf is case-insensitive on win32
+test('projectOf matches cwd with drive-letter casing difference on win32', () => {
+  if (process.platform !== 'win32') return;
+  const { reg } = makeRegistry('C:/root');
+  // Drive-letter casing difference (the primary win32 scenario): 'c:' vs 'C:'
+  assert.strictEqual(reg.projectOf('c:/root/alpha'), 'alpha');
+  assert.strictEqual(reg.projectOf('c:/root/alpha/sub/dir'), 'alpha');
+  // Full lowercase root + cwd: still finds the project
+  assert.notStrictEqual(reg.projectOf('c:/root/alpha'), null);
+});
+
 test('create exposes the derived project on the public session', () => {
   const { reg } = makeRegistry('C:/root');
   const a = reg.create('C:/root/alpha');
