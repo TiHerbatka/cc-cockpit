@@ -83,6 +83,9 @@ The "GUI errors" button.
 ### GUI-SIDEBAR-1 — 1
 The "1" element.
 
+### GUI-SIDEBAR-kill-and-remove — Kill and remove
+The "Kill and remove" button.
+
 ### GUI-SIDEBAR-error-panel — Error Panel
 The "Error Panel" element.
 
@@ -495,15 +498,3 @@ The "auto" button.
 
 ### GUI-MENU-a-model-classifier-approves-or-denies-ea — A model classifier approves or denies each call.
 The "A model classifier approves or denies each call." element.
-
-### GUI-MENU-context-menu — Context menu
-The "Context menu" element.
-
-### GUI-MENU-quick-preview — Quick preview
-The "Quick preview" button.
-
-### GUI-MENU-open-folder — Open folder
-The "Open folder" button.
-
-### GUI-MENU-rename — Rename
-The "Rename" button.
