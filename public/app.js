@@ -40,7 +40,6 @@ const errorCenter = (() => {
     for (let i = errors.length - 1; i >= 0; i--) { // newest first
       const e = errors[i];
       const li = document.createElement('li');
-      li.setAttribute('data-gui', 'error-row');
       const time = document.createElement('span'); time.className = 'err-time'; time.textContent = new Date(e.ts).toLocaleTimeString();
       const msg = document.createElement('span'); msg.className = 'err-msg'; msg.textContent = e.message;
       li.append(time, msg);
@@ -227,9 +226,9 @@ function openModeMenu() {
   const cur = claudeModeEl.textContent.trim();
   for (const [mode, tip] of MODES) {
     const row = document.createElement('div'); row.className = 'mode-menu-row' + (mode === cur ? ' active' : '');
-    const name = document.createElement('button'); name.type = 'button'; name.className = 'mode-menu-name'; name.setAttribute('data-gui', 'mode-menu-option'); name.textContent = mode;
+    const name = document.createElement('button'); name.type = 'button'; name.className = 'mode-menu-name'; name.textContent = mode;
     name.onclick = () => { ws.send(JSON.stringify({ type: 'set-permission-mode', id: focusedId, mode })); closeModeMenu(); };
-    const help = document.createElement('span'); help.className = 'mode-menu-help'; help.setAttribute('data-gui', 'mode-menu-help'); help.textContent = '?'; help.title = tip;
+    const help = document.createElement('span'); help.className = 'mode-menu-help'; help.textContent = '?'; help.title = tip;
     row.append(name, help); menu.appendChild(row);
   }
   document.body.appendChild(menu);
@@ -275,7 +274,6 @@ function renderInsessionInto(body) {
   ul.className = 'gui-todos';
   for (const t of todos) {
     const li = document.createElement('li');
-    li.setAttribute('data-gui', 'panel-todo-item');
     li.className = 'todo-' + t.status;
     li.textContent = (TODO_GLYPH[t.status] || '•') + ' ' + t.content;
     ul.appendChild(li);
@@ -289,7 +287,6 @@ function renderTopicsInto(body) {
   ul.className = 'float-topics';
   for (const t of topics) {
     const li = document.createElement('li');
-    li.setAttribute('data-gui', 'panel-topic');
     li.className = 'topic-' + t.status;
     const dot = t.status === 'active' ? '●' : t.status === 'parked' ? '◐' : '○';
     const code = document.createElement('span'); code.className = 'topic-code'; code.textContent = t.code || '';
@@ -307,10 +304,9 @@ function renderTodoMdInto(body) {
   if (!todoMdState.entries.length) { body.appendChild(floatEmpty('TODO.md is empty.')); return; }
   for (const e of todoMdState.entries) {
     const div = document.createElement('div');
-    if (e.kind === 'section') { div.className = 'todomd-section'; div.setAttribute('data-gui', 'panel-todomd-section'); div.textContent = e.text; }
+    if (e.kind === 'section') { div.className = 'todomd-section'; div.textContent = e.text; }
     else if (e.kind === 'item') {
       div.className = 'todomd-item' + (e.done ? ' done' : '');
-      div.setAttribute('data-gui', 'panel-todomd-item');
       div.style.paddingLeft = (e.depth * 16) + 'px';
       div.textContent = (e.done ? '☑ ' : '☐ ') + e.text;
     } else { div.className = 'todomd-textline'; div.textContent = e.text; }
@@ -331,7 +327,7 @@ function toggleFloat(source) {
   if (!floatEl) {
     floatEl = document.createElement('div');
     floatEl.className = 'float-panel';
-    floatEl.innerHTML = '<div class="float-head"><span class="float-title" data-gui="panel-title"></span>'
+    floatEl.innerHTML = '<div class="float-head"><span class="float-title"></span>'
       + '<button class="float-close" title="Close (Esc)">✕</button></div>'
       + '<div class="float-body"></div>';
     floatEl.querySelector('.float-close').onclick = closeFloat;
@@ -382,23 +378,19 @@ function render() {
   for (const key of keys) {
     const header = document.createElement('li');
     header.className = 'group-header';
-    header.setAttribute('data-gui', 'session-group-header');
     header.textContent = key;
     listEl.appendChild(header);
     for (const s of groups.get(key)) {
       const li = document.createElement('li');
-      li.setAttribute('data-gui', 'session-row');
       if (s.id === focusedId) li.classList.add('active');
       const icon = document.createElement('span');
       icon.className = `icon ${s.status}`;
-      icon.setAttribute('data-gui', 'status-icon');
       icon.textContent = STATE_ICON[s.status] || '○';
       const label = document.createElement('span');
       label.className = 'sess-label';
       label.textContent = s.label;
       const rm = document.createElement('button');
       rm.className = 'remove-btn';
-      rm.setAttribute('data-gui', 'session-remove');
       rm.textContent = '✕';
       rm.title = s.status === 'exited' ? 'Remove from cockpit' : 'Kill and remove';
       rm.onclick = (e) => { e.stopPropagation(); removeSession(s); };
@@ -501,7 +493,6 @@ const WEEK_MS = 168 * 3600e3;
 function projectRow(p, startIn) {
   const b = document.createElement('button');
   b.className = 'project-row';
-  b.setAttribute('data-gui', 'project-row');
   b.innerHTML = '<span class="proj-row-name"></span><span class="proj-row-time"></span>';
   b.querySelector('.proj-row-name').textContent = p.name;
   b.querySelector('.proj-row-time').textContent = p.lastActivity ? relTime(p.lastActivity) : 'never';
@@ -513,15 +504,15 @@ function projectRow(p, startIn) {
 function openNewSessionPicker() {
   openModal(async (box, close) => {
     box.innerHTML =
-      '<h2 data-gui="modal-title">New session</h2>' +
+      '<h2>New session</h2>' +
       '<div class="scope-switch">' +
         '<button data-scope="cockpit" class="active">Cockpit projects</button>' +
         '<button data-scope="discovered">Discovered folders</button>' +
       '</div>' +
       '<div class="modal-toolbar">' +
-        '<input class="modal-search" data-gui="modal-search" placeholder="Search by name or path…" />' +
-        '<button class="older-toggle" data-gui="older-toggle">Older than 7 days ▸</button>' +
-        '<button class="never-used-chip" data-gui="never-used-chip" hidden></button>' +
+        '<input class="modal-search" placeholder="Search by name or path…" />' +
+        '<button class="older-toggle">Older than 7 days ▸</button>' +
+        '<button class="never-used-chip" hidden></button>' +
       '</div>' +
       '<div class="resume-cols">Loading…</div>' +
       '<div class="modal-create"><input placeholder="new project name" /><button>Create &amp; start</button></div>' +
@@ -617,7 +608,7 @@ function openNewSessionPicker() {
         }
         bands3.forEach((band, i) => {
           const col = document.createElement('div'); col.className = 'resume-col';
-          const h = document.createElement('div'); h.className = 'resume-col-head'; h.setAttribute('data-gui', 'resume-col-head'); h.textContent = `${band.label} (${buckets[i].length})`;
+          const h = document.createElement('div'); h.className = 'resume-col-head'; h.textContent = `${band.label} (${buckets[i].length})`;
           const list = document.createElement('div'); list.className = 'resume-col-list';
           for (const p of buckets[i]) list.appendChild(projectRow(p, startIn));
           col.append(h, list); cols.appendChild(col);
@@ -627,7 +618,7 @@ function openNewSessionPicker() {
         const older = matched.filter((p) => !p.lastActivity || (now - Date.parse(p.lastActivity)) >= WEEK_MS);
         older.sort((a, b) => (Date.parse(b.lastActivity || 0) || -Infinity) - (Date.parse(a.lastActivity || 0) || -Infinity));
         const col = document.createElement('div'); col.className = 'resume-col';
-        const h = document.createElement('div'); h.className = 'resume-col-head'; h.setAttribute('data-gui', 'resume-col-head'); h.textContent = `Older than 7 days (${older.length})`;
+        const h = document.createElement('div'); h.className = 'resume-col-head'; h.textContent = `Older than 7 days (${older.length})`;
         const list = document.createElement('div'); list.className = 'resume-col-list';
         if (!older.length) list.innerHTML = '<div class="resume-empty">—</div>';
         for (const p of older) list.appendChild(projectRow(p, startIn));
@@ -729,7 +720,6 @@ function renderBandGroups(listEl, sessions, close) {
   const renderGroup = (g) => {
     const head = document.createElement('div');
     head.className = 'recent-group';
-    head.setAttribute('data-gui', 'recent-group');
     const name = document.createElement('div');
     name.className = 'proj-name'; name.textContent = baseName(g.cwd); name.title = baseName(g.cwd);
     const pth = document.createElement('div');
@@ -739,7 +729,6 @@ function renderBandGroups(listEl, sessions, close) {
     for (const s of g.ss) {
       const b = document.createElement('button');
       b.className = 'recent-row';
-      b.setAttribute('data-gui', 'recent-row');
       b.innerHTML = '<span class="recent-title"></span><span class="recent-time"></span>';
       b.querySelector('.recent-title').textContent = s.title;
       b.querySelector('.recent-time').textContent = relTime(s.lastActivity);
@@ -762,15 +751,15 @@ function renderBandGroups(listEl, sessions, close) {
 function openResumePicker() {
   openModal(async (box, close) => {
     box.innerHTML =
-      '<h2 data-gui="modal-title">Resume a session</h2>' +
+      '<h2>Resume a session</h2>' +
       '<div class="scope-switch">' +
         '<button data-scope="global" class="active">Global discovery</button>' +
         '<button data-scope="cockpit">Cockpit</button>' +
         '<button data-scope="temp">Temporary</button>' +
       '</div>' +
       '<div class="modal-toolbar">' +
-        '<input class="modal-search" data-gui="modal-search" placeholder="Search by session, project, or path…" />' +
-        '<button class="older-toggle" data-gui="older-toggle">Older than 7 days ▸</button>' +
+        '<input class="modal-search" placeholder="Search by session, project, or path…" />' +
+        '<button class="older-toggle">Older than 7 days ▸</button>' +
       '</div>' +
       '<div class="resume-cols">Loading…</div>';
     const search = box.querySelector('.modal-search');
@@ -808,7 +797,7 @@ function openResumePicker() {
         for (const s of matches) { const bi = RESUME_BANDS.findIndex((b) => s.age < b.max); if (bi >= 0) bands[bi].push(s); }
         RESUME_BANDS.forEach((band, i) => {
           const col = document.createElement('div'); col.className = 'resume-col';
-          const h = document.createElement('div'); h.className = 'resume-col-head'; h.setAttribute('data-gui', 'resume-col-head'); h.textContent = `${band.label} (${bands[i].length})`;
+          const h = document.createElement('div'); h.className = 'resume-col-head'; h.textContent = `${band.label} (${bands[i].length})`;
           const list = document.createElement('div'); list.className = 'resume-col-list';
           renderBandGroups(list, bands[i], close);
           col.append(h, list); cols.appendChild(col);
@@ -816,7 +805,7 @@ function openResumePicker() {
       } else {
         const older = matching(allFlat || []).filter((s) => s.age >= WEEK_MS);
         const col = document.createElement('div'); col.className = 'resume-col';
-        const h = document.createElement('div'); h.className = 'resume-col-head'; h.setAttribute('data-gui', 'resume-col-head'); h.textContent = `Older than 7 days (${older.length})`;
+        const h = document.createElement('div'); h.className = 'resume-col-head'; h.textContent = `Older than 7 days (${older.length})`;
         const list = document.createElement('div'); list.className = 'resume-col-list';
         renderBandGroups(list, older, close);
         col.append(h, list); cols.appendChild(col);
@@ -858,7 +847,6 @@ function openContextMenu(x, y, s) {
   for (const it of items) {
     const b = document.createElement('button');
     b.className = 'ctx-item';
-    b.setAttribute('data-gui', 'context-menu-item');
     b.textContent = it.label;
     b.onclick = () => { closeContextMenu(); it.act(); };
     menu.appendChild(b);
@@ -875,8 +863,8 @@ function openContextMenu(x, y, s) {
 function openRenameModal(s) {
   openModal((box, close) => {
     box.innerHTML =
-      '<h2 data-gui="modal-title">Rename session</h2>' +
-      '<div class="modal-create"><input data-gui="rename-input" /><button>Save</button></div>';
+      '<h2>Rename session</h2>' +
+      '<div class="modal-create"><input /><button>Save</button></div>';
     const input = box.querySelector('input');
     const btn = box.querySelector('button');
     input.value = s.label || '';
@@ -912,8 +900,6 @@ function openPreview(s) {
   head.append(title, closeBtn);
   const body = document.createElement('div');
   body.className = 'preview-gui';
-  body.setAttribute('data-gui', 'preview-body');
-  body.setAttribute('data-gui-opaque', '');
   body.textContent = 'Loading…';
   box.append(head, body);
   overlay.appendChild(box);
@@ -952,12 +938,12 @@ function interactionActions(buttons) {
 }
 
 function buildInteractionBody(card, req) {
-  const head = document.createElement('div'); head.className = 'interaction-head'; head.setAttribute('data-gui', 'interaction-head');
+  const head = document.createElement('div'); head.className = 'interaction-head';
   if (req.kind === 'permission') {
     head.textContent = 'Permission requested';
-    const sub = document.createElement('div'); sub.className = 'interaction-sub'; sub.setAttribute('data-gui', 'interaction-sub');
+    const sub = document.createElement('div'); sub.className = 'interaction-sub';
     sub.textContent = req.toolName ? `Claude wants to use ${req.toolName}` : 'Claude is requesting permission';
-    const pre = document.createElement('pre'); pre.className = 'interaction-input'; pre.setAttribute('data-gui', 'interaction-input');
+    const pre = document.createElement('pre'); pre.className = 'interaction-input';
     pre.textContent = req.input == null ? '' : JSON.stringify(req.input, null, 2);
     card.append(head, sub, pre, interactionActions([
       ['Allow once', 'btn-allow', () => answerInteraction('allow')],
@@ -966,7 +952,7 @@ function buildInteractionBody(card, req) {
     ]));
   } else if (req.kind === 'plan') {
     head.textContent = 'Plan ready for review';
-    const pre = document.createElement('pre'); pre.className = 'interaction-input'; pre.setAttribute('data-gui', 'interaction-input'); pre.textContent = req.plan || '(no plan text)';
+    const pre = document.createElement('pre'); pre.className = 'interaction-input'; pre.textContent = req.plan || '(no plan text)';
     card.append(head, pre, interactionActions([
       ['Approve', 'btn-allow', () => answerInteraction('approve')],
       ['Approve & auto-accept edits', 'btn-allow2', () => answerInteraction('approve-auto')],
@@ -983,7 +969,7 @@ function buildInteractionBody(card, req) {
       qhead.textContent = q.header ? `${q.header}: ${q.question}` : q.question;
       block.appendChild(qhead);
       for (const opt of (q.options || [])) {
-        const b = document.createElement('button'); b.type = 'button'; b.className = 'interaction-opt'; b.setAttribute('data-gui', 'interaction-option');
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'interaction-opt';
         b.textContent = opt.label + (opt.description ? ` — ${opt.description}` : '');
         b.onclick = () => {
           if (q.multiSelect) {
@@ -1005,7 +991,7 @@ function buildInteractionBody(card, req) {
   } else if (req.kind === 'elicitation') {
     const rq = req.request || {};
     head.textContent = rq.title || 'Input requested';
-    const msg = document.createElement('div'); msg.className = 'interaction-sub'; msg.setAttribute('data-gui', 'interaction-sub'); msg.textContent = rq.message || '';
+    const msg = document.createElement('div'); msg.className = 'interaction-sub'; msg.textContent = rq.message || '';
     card.append(head, msg);
     const content = {};
     if (rq.mode === 'url' && rq.url) {
@@ -1013,7 +999,7 @@ function buildInteractionBody(card, req) {
       card.appendChild(a);
     } else if (rq.requestedSchema && rq.requestedSchema.properties) {
       for (const [key, sch] of Object.entries(rq.requestedSchema.properties)) {
-        const wrap = document.createElement('label'); wrap.className = 'interaction-field'; wrap.setAttribute('data-gui', 'interaction-field');
+        const wrap = document.createElement('label'); wrap.className = 'interaction-field';
         wrap.textContent = (sch && sch.title) || key;
         const inp = document.createElement('input'); inp.type = 'text';
         inp.oninput = () => { content[key] = inp.value; };

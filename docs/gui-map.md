@@ -1,6 +1,6 @@
 # cc-cockpit — GUI glossary (generated)
 
-A map of the cockpit GUI surface, auto-discovered from the live GUI by the `/gui-map` skill — **do not edit by hand** (a re-run overwrites it). Each entry is a durable element identified by an inert `data-gui` marker in the product markup or by a stable interactive-control label; repeated structures collapse to one representative and pure data is excluded. Every element is keyed by a stable `GUI-<AREA>-<slug>` handle for cross-reference.
+A map of the cockpit GUI surface, auto-discovered from the live GUI by the `/gui-map` skill — **do not edit by hand** (a re-run overwrites it). Each entry is a durable element identified from the cockpit's existing markup — a stable interactive-control label, or a meaningful id/class resolved through the skill's curated allowlist (no product-side markers); repeated structures collapse to one representative and pure data is excluded. Every element is keyed by a stable `GUI-<AREA>-<slug>` handle for cross-reference.
 
 **Last generated: 2026-06-30**
 

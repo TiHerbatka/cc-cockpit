@@ -59,23 +59,19 @@ function itemEl(it, openKeys) {
   const div = document.createElement('div');
   if (it.kind === 'user') {
     div.className = 'gui-user';
-    div.setAttribute('data-gui', 'conv-user-message');
     div.textContent = it.text;
   } else if (it.kind === 'assistant') {
     div.className = 'gui-asst';
-    div.setAttribute('data-gui', 'conv-assistant-message');
     // Render Claude's markdown (H8). renderMarkdown is XSS-safe (escapes first); fall
     // back to plain text if the module somehow didn't load.
     if (window.renderMarkdown) div.innerHTML = window.renderMarkdown(it.text);
     else div.textContent = it.text;
   } else if (it.kind === 'thinking') {
     div.className = 'gui-think';
-    div.setAttribute('data-gui', 'conv-thinking');
     div.innerHTML = `<details><summary>thinking</summary><div></div></details>`;
     div.querySelector('div').textContent = it.text;
   } else if (it.kind === 'todos') {
     div.className = 'gui-todoblock';
-    div.setAttribute('data-gui', 'conv-todos');
     const ul = document.createElement('ul');
     ul.className = 'gui-todos';
     for (const t of it.todos) {
@@ -87,7 +83,6 @@ function itemEl(it, openKeys) {
     div.appendChild(ul);
   } else if (it.kind === 'tool') {
     div.className = `gui-tool tool-${esc(it.status)}`;
-    div.setAttribute('data-gui', 'conv-tool-card');
     const head = `${esc(it.name)} ${esc(keyArg(it.name, it.input))}`;
     div.innerHTML = `<details><summary><span class="tool-dot"></span>${head}</summary>`
       + `<pre class="tool-in"></pre><pre class="tool-out"></pre></details>`;
@@ -136,7 +131,6 @@ function toolGroupEl(run, openKeys) {
   const namePreview = names.slice(0, 4).join(', ') + (names.length > 4 ? '…' : '');
   const details = document.createElement('details');
   details.className = `gui-tool-group ${cls}`;
-  details.setAttribute('data-gui', 'conv-tool-group');
   const summary = document.createElement('summary');
   summary.innerHTML = '<span class="tg-caret"></span>'
     + `<span class="tg-count">${run.length} tool calls</span>`
@@ -166,11 +160,11 @@ function renderLog(el, model, openKeys) {
 
 function mountGui(container, handlers) {
   container.innerHTML =
-    '<div class="gui-status" data-gui="conv-status"></div>'
-    + '<div class="gui-log" data-gui="conv-log"></div>'
+    '<div class="gui-status"></div>'
+    + '<div class="gui-log"></div>'
     + '<div class="gui-waiting" hidden><span class="gui-spinner"></span>Waiting for Claude…</div>'
     + '<form class="gui-compose">'
-    + '<div class="gui-compose-input" data-gui="compose-input" contenteditable="true" data-placeholder="Message this session…  (Enter to send · Shift/Ctrl+Enter for newline)"></div>'
+    + '<div class="gui-compose-input" contenteditable="true" data-placeholder="Message this session…  (Enter to send · Shift/Ctrl+Enter for newline)"></div>'
     + '<button type="submit">Send</button>'
     + '</form>';
   const statusEl = container.querySelector('.gui-status');

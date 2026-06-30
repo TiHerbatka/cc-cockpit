@@ -78,6 +78,22 @@ test('buildMap embeds the glossary and references per-state screenshots', () => 
   assert.match(html, /src="shots\/s2\.png"/);
 });
 
+// Self-contained map.html (gui-map v2): when given inlined base64 images, buildMap
+// emits `data:` URIs instead of shots/ paths, so the file opens via file:// alone.
+test('buildMap inlines screenshots as data URIs when imagesByState is given', () => {
+  const html = buildMap(CAP, { imagesByState: { s1: 'data:image/png;base64,AAA1', s2: 'data:image/png;base64,BBB2' } });
+  assert.match(html, /src="data:image\/png;base64,AAA1"/);
+  assert.match(html, /src="data:image\/png;base64,BBB2"/);
+  assert.ok(!html.includes('shots/s1.png'));
+  assert.ok(!html.includes('shots/s2.png'));
+});
+
+test('buildMap falls back to the shots/ path for a state missing an inlined image', () => {
+  const html = buildMap(CAP, { imagesByState: { s1: 'data:image/png;base64,AAA1' } });
+  assert.match(html, /src="data:image\/png;base64,AAA1"/); // s1 inlined
+  assert.match(html, /src="shots\/s2\.png"/);               // s2 absent → path fallback
+});
+
 test('buildMap skips a state whose elements were all deduped away', () => {
   const html = buildMap(CAP);
   assert.ok(!html.includes('id="state-s3"'));

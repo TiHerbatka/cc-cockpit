@@ -7,8 +7,14 @@
 // the significant elements visible in that state straight from the live DOM —
 // deriving a handle / name / area / description and measuring the bounding rect —
 // and (4) stashes the result in window.__captures[state]. A final read of
-// window.__captures is written to captures.json and fed to build.js. There is no
-// hand-curated manifest: the element list is whatever the DOM yields.
+// window.__captures is written to captures.json and fed to build.js.
+//
+// v2 — ZERO product-code footprint. Identity comes from the cockpit's EXISTING
+// markup, never from author-added markers: an element is mapped if it matches a
+// SKILL-SIDE curated allowlist (durable classes / structural selectors → a stable
+// slug + name, defined below) OR it is an interactive control with a stable label.
+// Pure-data leaves are excluded. The allowlist lives here, in the skill, so the
+// cockpit carries no `data-gui` attributes.
 //
 // NOT product code: it drives the real GUI from the outside, exactly as a user
 // would (clicking rows, opening panels), and reads layout via getBoundingClientRect.
@@ -192,6 +198,91 @@
     { sel: '#sidebar', area: 'SIDEBAR', captureRoot: false },
   ];
 
+  // ---- the skill-side identity allowlist -------------------------------------
+  // The cockpit carries NO mapping markers; identity for durable non-control
+  // elements (and for controls whose visible text is volatile data) lives HERE.
+  // Each entry: { sel, slug, name, opaque?, area? }. `el.matches(sel)` decides a
+  // hit; the FIRST matching entry (list order) wins. `area` constrains an entry to
+  // one region so a class shared across regions can't leak a handle into the wrong
+  // area. A hit OVERRIDES auto-control-labeling, so a data-text button (project row,
+  // mode row, ctx item, interaction option) gets a stable slug, not its text. To
+  // surface a NEW durable element, add an entry here — never a marker in public/.
+  // Slugs reproduce the established GUI-<area>-<slug> handle set exactly.
+  const ALLOWLIST = [
+    // SIDEBAR
+    { sel: '#session-list', slug: 'session-list', name: 'Session List' },
+    { sel: '#session-list li:not(.group-header)', slug: 'session-row', name: 'Session Row' }, // row <li> has no class
+    { sel: '.group-header', slug: 'session-group-header', name: 'Session Group Header' },
+    { sel: '#error-panel', slug: 'error-panel', name: 'Error Panel' },
+    { sel: '#error-list', slug: 'error-list', name: 'Error List' },
+    { sel: '#error-list li', slug: 'error-row', name: 'Error Row' },                          // row <li> has no class
+    // HEADER — list #head-state BEFORE the generic .icon so the header icon keeps its own slug.
+    { sel: '#head-state', slug: 'header-status-icon', name: 'Focused session status' },
+    { sel: '#head-label', slug: 'header-label', name: 'Focused session name' },
+    { sel: '#open-insession', slug: 'in-session-todo', name: 'In-session todos' },
+    { sel: '#open-topics', slug: 'topics', name: 'Topics' },
+    { sel: '#claude-mode', slug: 'mode', name: 'Permission mode' },
+    { sel: '#model-select', slug: 'model', name: 'Model' },
+    { sel: '#effort-select', slug: 'effort', name: 'Reasoning effort' },
+    { sel: '#open-docs', slug: 'docs', name: 'Docs' },
+    { sel: '#open-todomd', slug: 'todomd', name: 'TODO.md' },
+    { sel: '#interrupt-btn', slug: 'interrupt', name: 'Interrupt turn' },
+    // SIDEBAR status icon — after #head-state; constrained to SIDEBAR (.icon also on #head-state).
+    { sel: '.icon', area: 'SIDEBAR', slug: 'status-icon', name: 'Status Icon' },
+    // CONV
+    { sel: '.gui-status', slug: 'conv-status', name: 'Conv Status' },
+    { sel: '.gui-log', slug: 'conv-log', name: 'Conv Log' },
+    { sel: '.gui-user', slug: 'conv-user-message', name: 'Conv User Message' },
+    { sel: '.gui-think', slug: 'conv-thinking', name: 'Conv Thinking' },
+    { sel: '.gui-asst', slug: 'conv-assistant-message', name: 'Conv Assistant Message' },
+    { sel: '.gui-tool', slug: 'conv-tool-card', name: 'Conv Tool Card' },
+    { sel: '.gui-todoblock', slug: 'conv-todos', name: 'Conv Todos' },
+    { sel: '.gui-tool-group', slug: 'conv-tool-group', name: 'Conv Tool Group' },
+    // COMPOSE — also contenteditable; the allowlist fixes the slug to compose-input.
+    { sel: '.gui-compose-input', slug: 'compose-input', name: 'Compose Input' },
+    // PANEL — scoped selectors so CONV's own .gui-todos lis stay excluded.
+    { sel: '.float-title', slug: 'panel-title', name: 'Panel Title' },
+    { sel: '.float-topics > li', slug: 'panel-topic', name: 'Panel Topic' },
+    { sel: '.float-body .gui-todos > li', slug: 'panel-todo-item', name: 'Panel Todo Item' },
+    { sel: '.todomd-section', slug: 'panel-todomd-section', name: 'Panel Todomd Section' },
+    { sel: '.todomd-item', slug: 'panel-todomd-item', name: 'Panel Todomd Item' },
+    // INTERACTION
+    { sel: '.interaction-head', slug: 'interaction-head', name: 'Interaction Head' },
+    { sel: '.interaction-sub', slug: 'interaction-sub', name: 'Interaction Sub' },
+    { sel: '.interaction-input', slug: 'interaction-input', name: 'Interaction Input' },
+    { sel: '.interaction-opt', slug: 'interaction-option', name: 'Interaction Option' },
+    { sel: '.interaction-field', slug: 'interaction-field', name: 'Interaction Field' },
+    // MODAL
+    { sel: '.modal h2', slug: 'modal-title', name: 'Modal Title' },                            // h2 has no class
+    { sel: '.modal-create input:not([placeholder])', slug: 'rename-input', name: 'Rename Input' }, // no id/class/placeholder
+    { sel: '.preview-gui', slug: 'preview-body', name: 'Preview Body', opaque: true },
+    { sel: '.modal-search', slug: 'modal-search', name: 'Modal Search' },
+    { sel: '.older-toggle', slug: 'older-toggle', name: 'Older Toggle' },
+    { sel: '.never-used-chip', slug: 'never-used-chip', name: 'Never Used Chip' },
+    { sel: '.resume-col-head', slug: 'resume-col-head', name: 'Resume Col Head' },
+    { sel: '.project-row', slug: 'project-row', name: 'Project Row' },                          // button w/ volatile text
+    { sel: '.recent-group', slug: 'recent-group', name: 'Recent Group' },
+    { sel: '.recent-row', slug: 'recent-row', name: 'Recent Row' },                             // button w/ volatile text
+    // MENU
+    { sel: '.mode-menu-name', slug: 'mode-menu-option', name: 'Mode Menu Option' },             // button w/ volatile mode text
+    { sel: '.mode-menu-help', slug: 'mode-menu-help', name: 'Mode Menu Help' },
+    { sel: '.ctx-item', slug: 'context-menu-item', name: 'Context Menu Item' },                 // button w/ menu text
+  ];
+
+  // Selector union for opaque subtrees (map the element, but don't descend into it).
+  const OPAQUE_SEL = ALLOWLIST.filter((a) => a.opaque).map((a) => a.sel).join(',');
+
+  // First allowlist entry whose selector this element matches within `area`.
+  function matchAllow(el, area) {
+    for (const a of ALLOWLIST) {
+      if (a.area && a.area !== area) continue;
+      let hit = false;
+      try { hit = el.matches(a.sel); } catch { hit = false; }
+      if (hit) return a;
+    }
+    return null;
+  }
+
   const GENERIC_CLASS = new Set(['icon', 'doc-btn', 'mode-chip', 'usage-chip', 'model-select', 'sess-label']);
 
   function visible(el) {
@@ -212,22 +303,15 @@
     return cls.find((c) => !GENERIC_CLASS.has(c) && !/^(active|sel|flash|seen)$/.test(c)) || cls[0] || '';
   }
 
-  // A DOM element worth mapping: an element carrying an explicit `data-gui` marker
-  // (author intent — the identity anchor), or an unambiguous interactive control
-  // with a stable label. Pure data leaves (classed text with no marker) are
-  // intentionally NOT candidates — that leaf-by-text branch was the noise source.
+  // A DOM element worth mapping: one matched by the skill-side allowlist (durable
+  // identity), or an unambiguous interactive control with a stable label. Pure-data
+  // leaves (classed text with neither) are intentionally NOT candidates.
   function isInteractiveControl(el) {
     const tag = el.tagName.toLowerCase();
     if (tag === 'button' || tag === 'select' || tag === 'input' || tag === 'textarea') return true;
     if (tag === 'a' && el.getAttribute('href')) return true;
     if (el.isContentEditable || el.getAttribute('contenteditable') === 'true') return true;
     if (el.getAttribute('role') === 'button') return true;
-    return false;
-  }
-
-  function isCandidate(el) {
-    if (el.hasAttribute('data-gui')) return true;   // explicit author intent (the identity anchor)
-    if (isInteractiveControl(el)) return true;      // unambiguous control with a stable label
     return false;
   }
 
@@ -246,9 +330,10 @@
   }
   function clip(s) { s = String(s).replace(/\s+/g, ' ').trim(); return s.length <= 60 ? s : s.slice(0, 57) + '…'; }
 
-  // Stable label for an UNMARKED interactive control: never free-text-first as identity,
-  // but a short fixed caption IS an acceptable label (every DATA-labelled control is marked,
-  // so unmarked text is a stable caption like "Send", "Save", "Approve & auto-accept edits").
+  // Stable label for an UNMARKED interactive control (one with no allowlist entry):
+  // never free-text-first as identity, but a short fixed caption IS acceptable (every
+  // volatile-text control is in the allowlist, so the text reaching here is a stable
+  // caption like "Send", "Save", "Approve & auto-accept edits").
   function controlLabel(el) {
     const aria = el.getAttribute('aria-label'); if (aria && aria.trim() && !isNoisy(aria)) return clip(aria);
     const title = el.getAttribute('title');     if (title && title.trim() && !isNoisy(title)) return clip(title);
@@ -260,13 +345,10 @@
     return el.tagName.toLowerCase();
   }
 
-  // Returns { slug, name } — slug is the handle tail (literal for markers).
-  function identity(el) {
-    if (el.hasAttribute('data-gui')) {
-      const slug = el.getAttribute('data-gui');
-      const name = el.getAttribute('data-gui-name') || humanize(slug);
-      return { slug, name };
-    }
+  // Returns { slug, name }. An allowlist hit supplies the literal slug/name; an
+  // unmarked control derives them from its stable label.
+  function identity(el, allow) {
+    if (allow) return { slug: allow.slug, name: allow.name };
     const label = controlLabel(el);
     return { slug: slugify(label), name: humanize(label) };
   }
@@ -286,36 +368,35 @@
     return { x: r.x, y: r.y, width: r.width, height: r.height };
   }
 
-  // Skip descendants of an element flagged `data-gui-opaque` (map the opaque element
-  // itself, but do NOT re-map its subtree — e.g. the read-only preview conv mirror).
+  // Skip descendants of an opaque element (map the opaque element itself, but do NOT
+  // re-map its subtree — e.g. the read-only preview conv mirror, .preview-gui).
   function inOpaqueSubtree(el) {
-    const op = el.closest('[data-gui-opaque]');
+    if (!OPAQUE_SEL) return false;
+    const op = el.closest(OPAQUE_SEL);
     return !!op && op !== el;
   }
 
-  // Backstop for UNMARKED repeats we forgot to mark: collapse 3+ siblings that share a
-  // NON-EMPTY meaningful class within the same region/marked ancestor. Markers + byHandle
-  // already handle the intended collapses; this only catches a future un-marked data list.
-  // It deliberately does NOT fire for <3 members or for classless controls (so distinct
-  // fixed-label tabs/buttons are never merged).
+  // Backstop for UNMARKED repeats: collapse 3+ siblings that share a NON-EMPTY
+  // meaningful class within the same region. The allowlist already folds intended
+  // repeats by handle; this only catches a future un-listed data list of controls.
+  // It deliberately does NOT fire for allowlisted elements or for classless controls
+  // (so distinct fixed-label tabs/buttons are never merged).
   function signature(el, area) {
-    const anchor = el.closest('[data-gui]');            // nearest marked ancestor (or null)
-    const anchorKey = anchor && anchor !== el ? anchor.getAttribute('data-gui') : area;
-    return area + '|' + el.tagName + '|' + meaningfulClass(el) + '|' + anchorKey;
+    return area + '|' + el.tagName + '|' + meaningfulClass(el);
   }
 
   // Discover the elements visible in the currently-arranged DOM. Deduped by handle
   // within the state (so repeated identical elements — e.g. many session rows —
-  // collapse to one representative entry per kind, because they share a marker slug).
+  // collapse to one representative entry per kind, because they share a slug).
   function discover(state) {
     const assigned = new Set();
     const byHandle = new Map();
-    const add = (el, area, forcedName) => {
+    const add = (el, area, forcedName, allow) => {
       if (assigned.has(el) || !visible(el)) return;
       assigned.add(el);
       let slug, name;
-      if (forcedName) { name = forcedName; slug = slugify(forcedName); }   // captureRoot path, unchanged
-      else { ({ slug, name } = identity(el)); }
+      if (forcedName) { name = forcedName; slug = slugify(forcedName); }   // captureRoot path
+      else { ({ slug, name } = identity(el, allow)); }
       const handle = 'GUI-' + area + '-' + slug;
       if (byHandle.has(handle)) return;                                    // folds repeats with the same slug
       byHandle.set(handle, { handle, name, area, description: descOf(el, name), rect: rectOf(el) });
@@ -328,14 +409,15 @@
         for (const el of root.querySelectorAll('*')) {
           if (assigned.has(el)) continue;
           if (inOpaqueSubtree(el)) continue;
-          if (!isCandidate(el)) continue;
+          const allow = matchAllow(el, region.area);
+          if (!allow && !isInteractiveControl(el)) continue;     // not a candidate
           // signature backstop: only for UNMARKED candidates with a non-empty class
-          if (!el.hasAttribute('data-gui') && meaningfulClass(el)) {
+          if (!allow && meaningfulClass(el)) {
             const sig = signature(el, region.area);
             const n = (sigCount.get(sig) || 0) + 1; sigCount.set(sig, n);
             if (n >= 3) continue;   // 3rd+ identical sibling → drop (keep the first representative)
           }
-          add(el, region.area);
+          add(el, region.area, undefined, allow);
         }
       }
     }
@@ -364,7 +446,7 @@
 
   window.__captures = window.__captures || {};
   window.__guiMap = {
-    version: 2,
+    version: 3,
     // Capture order: 'main' first (it needs all five status dots, which the
     // interaction states consume by focusing needs-you sessions); interactions last.
     STATE_ORDER: [

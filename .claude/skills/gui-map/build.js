@@ -62,7 +62,7 @@ function toGlossary(allElements, { date } = {}) {
   const lines = [];
   lines.push('# cc-cockpit — GUI glossary (generated)');
   lines.push('');
-  lines.push('A map of the cockpit GUI surface, auto-discovered from the live GUI by the `/gui-map` skill — **do not edit by hand** (a re-run overwrites it). Each entry is a durable element identified by an inert `data-gui` marker in the product markup or by a stable interactive-control label; repeated structures collapse to one representative and pure data is excluded. Every element is keyed by a stable `GUI-<AREA>-<slug>` handle for cross-reference.');
+  lines.push('A map of the cockpit GUI surface, auto-discovered from the live GUI by the `/gui-map` skill — **do not edit by hand** (a re-run overwrites it). Each entry is a durable element identified from the cockpit\'s existing markup — a stable interactive-control label, or a meaningful id/class resolved through the skill\'s curated allowlist (no product-side markers); repeated structures collapse to one representative and pure data is excluded. Every element is keyed by a stable `GUI-<AREA>-<slug>` handle for cross-reference.');
   if (date) { lines.push(''); lines.push(`**Last generated: ${date}**`); }
   lines.push('');
   lines.push('Visual map (hover/click hotspots): [gui-map/map.html](gui-map/map.html).');
@@ -79,7 +79,11 @@ function toGlossary(allElements, { date } = {}) {
 }
 
 // ---- docs/gui-map/map.html (pure, self-contained) ----------------------------
-function buildMap(capturesByState = {}, { date } = {}) {
+// `imagesByState[state]` (when provided) is a base64 `data:` URI for that state's
+// screenshot; inlining it makes map.html a single self-contained file openable via
+// file:// with no `shots/` dependency. Absent → fall back to the `shots/<state>.png`
+// path (keeps the pure function testable without real image bytes).
+function buildMap(capturesByState = {}, { date, imagesByState } = {}) {
   const { elementsByState, all } = dedupe(capturesByState);
 
   const glossaryHtml = groupByArea(all).map(([area, els]) => {
@@ -102,6 +106,7 @@ function buildMap(capturesByState = {}, { date } = {}) {
     if (!els.length) return '';
     const vw = (cap.viewport && cap.viewport.width) || 1440;
     const vh = (cap.viewport && cap.viewport.height) || 900;
+    const imgSrc = (imagesByState && imagesByState[state]) || `shots/${state}.png`;
     const pc = (n, d) => (Math.max(0, n) / d * 100).toFixed(3);
     const hotspots = els.filter((el) => el.rect).map((el) => {
       const r = el.rect;
@@ -113,7 +118,7 @@ function buildMap(capturesByState = {}, { date } = {}) {
       <section class="map-state" id="state-${escHtml(state)}">
         <h3>${escHtml(cap.title || state)} <span class="map-count">${els.length}</span></h3>
         <div class="shot" style="aspect-ratio:${vw} / ${vh}">
-          <img src="shots/${escHtml(state)}.png" alt="${escHtml(cap.title || state)}" loading="lazy" />
+          <img src="${escHtml(imgSrc)}" alt="${escHtml(cap.title || state)}" loading="lazy" />
           ${hotspots}
         </div>
       </section>`;
@@ -209,8 +214,18 @@ if (require.main === module) {
   const today = new Date().toISOString().slice(0, 10);
   const { all } = dedupe(captures);
   fs.mkdirSync(mapDir, { recursive: true });
+  // Inline each captured screenshot as a base64 data URI so map.html is a single
+  // self-contained file (opens via file://, no shots/ dependency). A missing shot
+  // falls back to the shots/<state>.png path inside buildMap.
+  const imagesByState = {};
+  for (const state of Object.keys(captures)) {
+    try {
+      const png = fs.readFileSync(path.join(mapDir, 'shots', `${state}.png`));
+      imagesByState[state] = `data:image/png;base64,${png.toString('base64')}`;
+    } catch { /* no shot for this state — buildMap falls back to the path form */ }
+  }
   fs.writeFileSync(path.join(docsDir, 'gui-map.md'), toGlossary(all, { date: today }));
-  fs.writeFileSync(path.join(mapDir, 'map.html'), buildMap(captures, { date: today }));
+  fs.writeFileSync(path.join(mapDir, 'map.html'), buildMap(captures, { date: today, imagesByState }));
 
   const byArea = {};
   for (const el of all) byArea[el.area] = (byArea[el.area] || 0) + 1;
