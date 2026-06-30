@@ -503,3 +503,61 @@ test('_refreshUsage is a no-op for a driver without the usage methods (no extra 
   drivers[0]._msg(init('default'));   // would trigger a refresh, but the fake driver lacks the methods
   assert.deepStrictEqual(metas, [{ mode: 'default', model: 'm' }]);
 });
+
+// ---- E1: rename persistence via renameStorePath ----------------------------
+
+const { loadRenameMap, saveRenameMap } = require('../server/rename-store');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+function makeRegistryWithStore(projectsRoot = 'C:/root', renameStorePath = null) {
+  const drivers = [];
+  const reg = new SessionRegistry({
+    spawnDriver: () => { const d = makeFakeDriver(); drivers.push(d); return d; },
+    projectsRoot,
+    renameStorePath,
+  });
+  return { reg, drivers };
+}
+
+function tmpRenameFile() {
+  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cockpit-sess-rename-')), 'renames.json');
+}
+
+test('rename with a renameStorePath writes the customName to disk', () => {
+  const storeFile = tmpRenameFile();
+  const { reg } = makeRegistryWithStore('C:/root', storeFile);
+  const s = reg.create('C:/root/alpha');
+  reg.rename(s.id, 'My Session');
+  const persisted = loadRenameMap(storeFile);
+  assert.strictEqual(persisted.get(s.ccSessionId), 'My Session');
+});
+
+test('rename with empty string removes the entry from disk', () => {
+  const storeFile = tmpRenameFile();
+  const { reg } = makeRegistryWithStore('C:/root', storeFile);
+  const s = reg.create('C:/root/alpha');
+  reg.rename(s.id, 'My Session');
+  reg.rename(s.id, ''); // clear
+  const persisted = loadRenameMap(storeFile);
+  assert.strictEqual(persisted.has(s.ccSessionId), false);
+});
+
+test('session created with a ccSessionId that has a persisted name restores the label', () => {
+  const storeFile = tmpRenameFile();
+  // Pre-populate the store as if a prior run persisted a rename.
+  saveRenameMap(storeFile, new Map([['pre-existing-ccid', 'Restored Name']]));
+  const { reg } = makeRegistryWithStore('C:/root', storeFile);
+  // Create a resumed session with the matching ccSessionId.
+  const s = reg.create('C:/root/alpha', { resumeId: 'pre-existing-ccid' });
+  assert.strictEqual(reg.get(s.id).label, 'Restored Name');
+});
+
+test('rename without a renameStorePath (no persistence) still updates the in-memory label', () => {
+  const { reg } = makeRegistryWithStore('C:/root', null);
+  const s = reg.create('C:/root/alpha');
+  reg.rename(s.id, 'In-memory Only');
+  assert.strictEqual(reg.get(s.id).label, 'In-memory Only');
+  // No file to check — just confirm no error was thrown.
+});

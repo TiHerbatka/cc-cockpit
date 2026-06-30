@@ -9,6 +9,7 @@ const path = require('node:path');
 const projects = require('./projects');
 const { sdkMessageToRecords } = require('./sdk');
 const { createConversation } = require('./normalize');
+const { loadRenameMap, saveRenameMap } = require('./rename-store');
 
 // Escape a string for safe interpolation into a RegExp (project names allow
 // chars like . ( ) + that would otherwise be regex metacharacters).
@@ -37,11 +38,14 @@ function mapUsageWindows(usageResp, ctxResp) {
 }
 
 class SessionRegistry extends EventEmitter {
-  constructor({ spawnDriver, projectsRoot = null, loadResumeRecords = () => [] }) {
+  constructor({ spawnDriver, projectsRoot = null, loadResumeRecords = () => [], renameStorePath = null }) {
     super();
     this.spawnDriver = spawnDriver;
     this.projectsRoot = projectsRoot;
     this.loadResumeRecords = loadResumeRecords; // (ccSessionId) -> transcript records[]
+    this.renameStorePath = renameStorePath;
+    // Persisted rename labels keyed by ccSessionId. Loaded at startup; written on each rename.
+    this.renameMap = loadRenameMap(renameStorePath);
     this.sessions = new Map();
     this.focusedId = null;
   }
@@ -62,11 +66,12 @@ class SessionRegistry extends EventEmitter {
       conversation: createConversation(), // the live render model + delta fold
       pendingInteraction: null, // a blocking interaction (permission/question/plan/elicitation) awaiting the user
       autoTitle: null,     // Claude Code aiTitle (filled in for temp sessions)
-      // A fresh project session is auto-named "<project> new <N>" so siblings in
-      // the same project are distinguishable from the start (B5). It lives in the
-      // customName slot — project (non-temp) sessions never receive an aiTitle, so
-      // this never wrongly suppresses one — and is still overridable by a rename.
-      customName: this._autoProjectName(cwd, opts),
+      // A persisted rename (restored from disk by ccSessionId — E1) wins; otherwise a
+      // fresh project session is auto-named "<project> new <N>" so siblings in the same
+      // project are distinguishable from the start (B5). Both live in the customName
+      // slot — project (non-temp) sessions never receive an aiTitle, so this never
+      // wrongly suppresses one — and either is still overridable by a later rename.
+      customName: this.renameMap.get(ccSessionId) || this._autoProjectName(cwd, opts),
       driver,
       working: true,       // a turn is in progress (send..result)
       waiting: false,      // a permission prompt is pending (-> needs-you)
@@ -270,12 +275,21 @@ class SessionRegistry extends EventEmitter {
   }
 
   // A user-set display name. Empty/whitespace clears it. Wins over auto/default.
+  // The rename is persisted to disk (keyed by ccSessionId) so it survives server
+  // restart and is restored when the same session is resumed.
   rename(id, name) {
     const s = this.sessions.get(id);
     if (!s) return;
     const before = this._label(s);
     const trimmed = typeof name === 'string' ? name.trim() : '';
     s.customName = trimmed || null;
+    // Persist: update the store and write it back.
+    if (trimmed) {
+      this.renameMap.set(s.ccSessionId, trimmed);
+    } else {
+      this.renameMap.delete(s.ccSessionId);
+    }
+    saveRenameMap(this.renameStorePath, this.renameMap);
     if (this._label(s) !== before) this.emit('sessions');
   }
 

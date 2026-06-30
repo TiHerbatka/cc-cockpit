@@ -40,7 +40,7 @@ const MIME = {
 // pre-flight check so the cockpit can report the real cause. It is injected (not a
 // hard fs call) so the pure server stays testable with synthetic cwds; the default
 // is permissive and the real check is wired in production (server/index.js).
-function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot = projects.projectsRoot(), claudeDir, openInExplorer = defaultOpenInExplorer, openFile = defaultOpenFile, dirExists = () => true } = {}) {
+function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot = projects.projectsRoot(), claudeDir, openInExplorer = defaultOpenInExplorer, openFile = defaultOpenFile, dirExists = () => true, renameStorePath } = {}) {
   // On resume, read the prior transcript so the registry can seed the model.
   const loadResumeRecords = (ccSessionId) => {
     try {
@@ -54,7 +54,13 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
       return records;
     } catch { return []; }
   };
-  const registry = new SessionRegistry({ spawnDriver, projectsRoot, loadResumeRecords });
+  // Rename persistence: store alongside the projects root so it survives
+  // alongside user data (not embedded in the app's code directory).
+  // Default: <projectsRoot>/.cockpit-renames.json
+  const resolvedRenameStorePath = renameStorePath !== undefined
+    ? renameStorePath
+    : path.join(projectsRoot, '.cockpit-renames.json');
+  const registry = new SessionRegistry({ spawnDriver, projectsRoot, loadResumeRecords, renameStorePath: resolvedRenameStorePath });
 
   const server = http.createServer((req, res) => {
     let urlPath = decodeURIComponent(req.url.split('?')[0]);

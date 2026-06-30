@@ -89,11 +89,11 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 
 ### MECH-session-registry — In-memory session registry
 
-**What it does:** An in-memory registry is the authoritative live-session list. It owns each session's driver, cwd, status flags, focus, and naming; recomputes the derived status on changes; and emits the events the server broadcasts. Nothing in it persists across a server restart.
+**What it does:** An in-memory registry is the authoritative live-session list. It owns each session's driver, cwd, status flags, focus, and naming; recomputes the derived status on changes; and emits the events the server broadcasts. Its live state is in-memory; the one persisted slice is user renames (see below).
 
 **Key facts:**
 - Displayed-label precedence: customName (user rename) > autoTitle (Claude Code aiTitle) > folder basename.
-- Custom name and auto-title are in-memory only — lost on server restart/resume.
+- The auto-title is in-memory only (lost on restart/resume). A user **rename** (customName set via `rename`) is persisted to disk keyed by the Claude Code session id, so it survives restart and is restored when the session is resumed — loaded into the registry at startup and written on each rename (see `FEAT-rename`).
 - Owns the focused-session id and acknowledgement, the per-session status flags (working / waiting / ended / acknowledged / exited), and a usage-refresh in-flight de-dup guard.
 - Project (non-temp) sessions never receive an aiTitle, so they default to a generated project-scoped name held in the customName slot: `<project> new <N>`, where N is one past the highest existing `<project> new <#>` among current sessions whose customName matches that exact pattern (renamed siblings drop out). Temp / resume / outside-the-projects-root sessions keep the folder-basename default instead.
 - Optimistic user-echo on send: the SDK does not echo streamed user input back as a user message, so on send the registry folds a synthetic user record into the conversation itself and emits the delta — a just-sent turn renders immediately rather than waiting for the SDK to reflect it.
@@ -101,7 +101,7 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 
 **Area:** the in-memory session registry.
 
-**Last verified: 2026-06-29**
+**Last verified: 2026-06-30**
 
 ### MECH-discovery-scan — Transcript tail + recent-session scan
 

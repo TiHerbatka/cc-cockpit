@@ -96,11 +96,11 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 **Key facts:**
 - Reached via the session row's right-click context menu (Rename), opening a small modal pre-filled with the current name.
 - The custom name takes precedence over the auto-title and the folder name.
-- The custom name is held in memory by the server and is lost on a server restart (it then falls back to the auto-title or folder name).
+- The custom name is persisted to disk — a flat JSON file (`<projectsRoot>/.cockpit-renames.json`) keyed by the Claude Code session id — so it survives a server restart and is restored when the same session is resumed. Clearing the name (empty rename) removes its entry. An absent or malformed file is treated as "no renames" and never blocks startup; a failed write is swallowed (the in-memory rename still applies).
 
-**Area:** the registry rename and the rename modal in the web client.
+**Area:** the registry rename plus its disk-backed rename store, and the rename modal in the web client.
 
-**Last verified: 2026-06-29**
+**Last verified: 2026-06-30**
 
 ### FEAT-quick-preview — Read-only quick preview
 
