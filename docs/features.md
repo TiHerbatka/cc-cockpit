@@ -182,8 +182,9 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 - The window segments are color-coded by utilization (green under 70%, yellow 70–90%, red at/above 90%) and carry a "resets at" tooltip.
 - The chip is per-session and resets when you switch sessions; each incoming figure updates only its own segment.
 - The whole row is hidden until there is at least one segment to show (no empty strip), and collapses again on a session switch.
+- The client-side accumulator fold (each incoming meta updates only its own segment, never blanking the others) plus the token/percent formatting are a pure, unit-tested module; the header view only turns the resulting segment descriptors into DOM spans.
 
-**Area:** the usage row below the header and the usage-window computation.
+**Area:** the usage row below the header (its pure accumulator/format module + the DOM view) and the usage-window computation.
 
 **Last verified: 2026-06-30**
 
