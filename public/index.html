@@ -9,40 +9,40 @@
   <div id="sidebar">
     <h1><span>cc-cockpit</span><button id="error-toggle" title="GUI errors" aria-label="GUI errors" hidden>⚠ <span id="error-count">0</span></button></h1>
     <div id="error-center">
-      <div id="error-panel" hidden>
+      <div id="error-panel" data-gui="error-panel" hidden>
         <div class="error-panel-head"><span>GUI errors (<span id="error-count2">0</span>)</span><span><button id="error-clear">clear</button> <button id="error-close">✕</button></span></div>
-        <ul id="error-list"></ul>
+        <ul id="error-list" data-gui="error-list"></ul>
       </div>
     </div>
-    <ul id="session-list"></ul>
+    <ul id="session-list" data-gui="session-list"></ul>
     <button id="add-btn">+ New session</button>
     <button id="resume-btn">Resume…</button>
     <div id="error" class="error"></div>
   </div>
   <div id="main">
     <div id="session-head">
-      <span id="head-state" class="icon"></span>
-      <span id="head-label"></span>
-      <button id="open-insession" class="doc-btn" title="In-session todos (this session's live task list)">In-session todo</button>
-      <button id="open-topics" class="doc-btn" title="Topics tracked for this session">Topics</button>
-      <button id="interrupt-btn" title="Interrupt (Esc)" hidden>⛔ Stop</button>
-      <span id="claude-mode" class="mode-chip" title="Permission mode — click to change">–</span>
+      <span id="head-state" class="icon" data-gui="header-status-icon" data-gui-name="Focused session status"></span>
+      <span id="head-label" data-gui="header-label" data-gui-name="Focused session name"></span>
+      <button id="open-insession" class="doc-btn" data-gui="in-session-todo" data-gui-name="In-session todos" title="In-session todos (this session's live task list)">In-session todo</button>
+      <button id="open-topics" class="doc-btn" data-gui="topics" data-gui-name="Topics" title="Topics tracked for this session">Topics</button>
+      <button id="interrupt-btn" data-gui="interrupt" data-gui-name="Interrupt turn" title="Interrupt (Esc)" hidden>⛔ Stop</button>
+      <span id="claude-mode" class="mode-chip" data-gui="mode" data-gui-name="Permission mode" title="Permission mode — click to change">–</span>
       <select id="model-select" class="model-select" title="Model">
         <option value="claude-opus-4-8">Opus 4.8</option>
         <option value="claude-sonnet-4-6">Sonnet 4.6</option>
         <option value="claude-haiku-4-5">Haiku 4.5</option>
       </select>
-      <select id="effort-select" class="model-select" title="Reasoning effort">
+      <select id="effort-select" class="model-select" data-gui="effort" data-gui-name="Reasoning effort" title="Reasoning effort">
         <option value="low">low</option>
         <option value="medium">medium</option>
         <option value="high" selected>high</option>
         <option value="xhigh">xhigh</option>
         <option value="max">max</option>
       </select>
-      <button id="open-docs" class="doc-btn" title="Open local-docs.md">📄 Docs</button>
-      <button id="open-todomd" class="doc-btn" title="Show TODO.md entries">TODO.MD</button>
+      <button id="open-docs" class="doc-btn" data-gui="docs" data-gui-name="Docs" title="Open local-docs.md">📄 Docs</button>
+      <button id="open-todomd" class="doc-btn" data-gui="todomd" data-gui-name="TODO.md" title="Show TODO.md entries">TODO.MD</button>
     </div>
-    <div id="usage-bar" hidden><span id="usage-chip" class="usage-chip" title="Context / 5h / 7d usage"></span></div>
+    <div id="usage-bar" hidden><span id="usage-chip" class="usage-chip" data-gui="usage" data-gui-name="Usage chip" title="Context / 5h / 7d usage"></span></div>
     <div id="content">
       <div id="gui-pane" hidden></div>
     </div>

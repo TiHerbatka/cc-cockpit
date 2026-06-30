@@ -1,6 +1,6 @@
 ---
 name: gui-map
-description: Regenerate the cc-cockpit GUI glossary + interactive visual map (docs/gui-map.md + docs/gui-map/map.html). Use after the GUI changes, or whenever you need a shared, referenceable map of the cockpit's GUI elements (every element keyed by a GUI-<AREA>-<slug> handle). Auto-discovers elements straight from the live GUI — no hand-curated manifest, no live claude, no tokens.
+description: Regenerate the cc-cockpit GUI glossary + interactive visual map (docs/gui-map.md + docs/gui-map/map.html). Use after the GUI changes, or whenever you need a shared, referenceable map of the cockpit's GUI elements (every element keyed by a GUI-<AREA>-<slug> handle). Auto-discovered from author-marked durable elements (data-gui) plus interactive controls — no hand-curated manifest, no live claude, no tokens; pure data/content is intentionally excluded.
 ---
 
 # /gui-map — regenerate the GUI glossary & visual map
@@ -9,12 +9,12 @@ Produces two cross-linked artifacts:
 - **`docs/gui-map.md`** — the generated GUI glossary: every area/element keyed by a `GUI-<AREA>-<slug>` handle, with an auto-derived name + description. (Generated — never hand-edit; a re-run overwrites it.)
 - **`docs/gui-map/map.html`** — a self-contained visual map: each captured screenshot with hotspot overlays (hover → name/description; click → jump to the glossary entry). Screenshots live in `docs/gui-map/shots/`.
 
-It drives the **real** cockpit GUI fed by **canned fixture data** and **auto-discovers** the on-screen elements from the live DOM — there is no hand-curated manifest. Everything it runs is dev-only tooling under this skill dir; nothing ships into the product.
+It drives the **real** cockpit GUI fed by **canned fixture data** and **auto-discovers** the on-screen elements from the live DOM — durable elements are identified by an inert `data-gui` marker in the product markup, interactive controls by their stable label, and pure data/content is excluded. There is no separate hand-curated manifest; identity lives in the markup, co-located with the elements. The only product-markup footprint is those inert `data-gui` attributes (like `data-testid` — no styling or behavior keys off them); everything else it runs is dev-only tooling under this skill dir.
 
 ## How it works (the pieces, all under `.claude/skills/gui-map/`)
 - `fixture-server.js` — dev launcher: imports the real `createApp` with a fake driver, serving the genuine GUI from canned data on `127.0.0.1:4488` (+ an aux server on `4489` that serves `probe.js` with CORS). Regenerates its throwaway fixture-home each run.
 - `fixture-data.js` — the canned session roster (covers every sidebar group/status-dot, conversation item kinds, the floating panels, all four interaction variants, both pickers, menus, modals, error center).
-- `probe.js` — browser-side helper: `window.__guiMap.capture(state)` closes overlays, arranges the named state, and **auto-discovers** the significant visible elements (interactive / id'd / titled / labeled-leaf), deriving a handle/name/area/description + bounding rect for each.
+- `probe.js` — browser-side helper: `window.__guiMap.capture(state)` closes overlays, arranges the named state, and **auto-discovers** the durable visible elements (elements carrying a `data-gui` marker, plus interactive controls named by a stable label); repeated structures collapse to one representative and data is excluded — deriving a handle/name/area/description + bounding rect for each.
 - `build.js` — pure generator: `captures.json` → `docs/gui-map.md` + `docs/gui-map/map.html` (dedupes each element to the first state it appears in). Its unit test is `test/gui-map.test.js` (runs in `npm test`).
 
 ## Prerequisites
@@ -56,6 +56,7 @@ It drives the **real** cockpit GUI fed by **canned fixture data** and **auto-dis
 - Serve and open `docs/gui-map/map.html` over http (the Playwright MCP blocks `file://` — use a quick static server) and confirm: each state screenshot shows aligned hotspots; hover shows name + description; clicking a hotspot scrolls to its glossary entry.
 
 ## Notes
-- **Fully auto-generated (A10):** the element list, handles, names, and descriptions are derived mechanically from the DOM — they are functional, not carefully worded. Class-only decorative elements without an id/title/short-text may not be captured; that is the accepted trade-off of zero hand-maintenance.
-- To surface a **new on-screen situation** (a state the fixture doesn't yet reach), extend the fixture roster (`fixture-data.js`) + add an `arrange` case + `STATE_ORDER` entry in `probe.js`, then re-run. Individual elements within an already-captured state need no manual step — they are discovered automatically.
-- Re-runnable by design: a fresh run re-screenshots and re-discovers, so the map stays current after layout/CSS/markup changes.
+- **Auto-generated, durable-element-scoped:** the element list, handles, names, and descriptions are derived mechanically — functional, not carefully worded. **Data/content is deliberately not mapped.** Surfacing a NEW durable element means adding a `data-gui` marker in `public/` (a small inert footprint, like `data-testid`), then re-running — not just re-running.
+- **Marker schema** (inert attributes in `public/`; nothing in CSS/JS keys off them): `data-gui="<permanent-slug>"` is the element's fixed identity — the `<slug>` becomes the handle tail, and repeated instances share one slug so they fold to a single entry; `data-gui-name="<Display Name>"` is an optional human name (else the slug is humanized); `data-gui-opaque` means map this element but do **not** descend into its subtree (used for the read-only preview mirror).
+- To surface a **new on-screen situation** (a state the fixture doesn't yet reach), extend the fixture roster (`fixture-data.js`) + add an `arrange` case + `STATE_ORDER` entry in `probe.js`, then re-run. Within an already-captured state, an element is discovered automatically once it carries a `data-gui` marker (or is an interactive control); pure data stays excluded.
+- **Re-runnable and reproducible:** the run injects a transitions-off stylesheet before capturing, so layout/visibility is frozen to final computed style and two identical runs produce **identical handle sets**. A fresh run re-screenshots and re-discovers, so the map stays current after layout/CSS/markup changes.

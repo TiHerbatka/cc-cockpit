@@ -39,9 +39,12 @@ const todoWrite = (id, todos) => ({ type: 'assistant', message: { content: [{ ty
 const result = (usage) => ({ type: 'result', subtype: 'success', usage });
 
 // A full conversation exercising every item kind the GUI renders: user prompt,
-// assistant thinking (collapsible), assistant text, a tool card that resolves OK,
-// a todos block, and a tool card that resolves as an error. Ends with a result so
-// the turn closes (idle when focused) and the per-turn token segment populates.
+// assistant thinking (collapsible), assistant text, a standalone tool card that
+// resolves OK, a todos block, a standalone tool card that resolves as an error,
+// and a run of 3 consecutive tool calls (which the GUI collapses into a grouped
+// "tool group" — a separate render kind from the single card; needs 3+ in a row).
+// Ends with a result so the turn closes (idle when focused) and the per-turn token
+// segment populates.
 const RICH_CONVERSATION = [
   init('default', 'claude-opus-4-8'),
   userMsg('Add a dark-mode toggle to the settings panel and persist the choice.'),
@@ -56,6 +59,18 @@ const RICH_CONVERSATION = [
   ]),
   toolUse('tu3', 'Bash', { command: 'npm test' }),
   toolResult('tu3', '1 test failed: settings persistence (expected "dark", got null)', true),
+  // An assistant line here keeps the Bash card above standing alone (a single
+  // tool card) and starts the consecutive run below as a fresh group.
+  asstText('Splitting the change across the stylesheet and the settings module, then re-checking.'),
+  // Three back-to-back tool calls with no non-tool item between them -> the GUI
+  // folds these into one grouped tool-calls block (gui-tool-group). tool_result
+  // messages only patch their tool item, so they do NOT break the run.
+  toolUse('tu4', 'Read', { file_path: 'public/theme.css' }),
+  toolResult('tu4', ':root { --bg: #ffffff; --fg: #111111; }'),
+  toolUse('tu5', 'Edit', { file_path: 'public/settings.js', old_string: 'renderSettings(el)', new_string: 'renderSettings(el, theme)' }),
+  toolResult('tu5', 'Edited public/settings.js'),
+  toolUse('tu6', 'Edit', { file_path: 'public/theme.css', old_string: '--bg: #ffffff;', new_string: '--bg: var(--theme-bg);' }),
+  toolResult('tu6', 'Edited public/theme.css'),
   result({ input_tokens: 1820, output_tokens: 640, cache_read_input_tokens: 82000 }),
 ];
 

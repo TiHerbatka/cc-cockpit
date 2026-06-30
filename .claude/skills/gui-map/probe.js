@@ -69,6 +69,12 @@
     // hide it so it doesn't linger over the sidebar in later captures.
     const ep = document.getElementById('error-panel');
     if (ep) ep.hidden = true;
+    // Clear any accumulated GUI errors so #error-toggle (the "GUI errors" pill) returns
+    // to hidden between states — else the demo error fired by the error-center arrange
+    // leaks the `gui-errors` element into every later capture and makes the run
+    // non-reproducible (it would attach to a different state run-to-run after dedup).
+    const ecl = document.getElementById('error-clear');
+    if (ecl) ecl.click();
     await sleep(120);
   }
 
@@ -206,21 +212,22 @@
     return cls.find((c) => !GENERIC_CLASS.has(c) && !/^(active|sel|flash|seen)$/.test(c)) || cls[0] || '';
   }
 
-  // A DOM element worth mapping: an interactive control, an identified element
-  // (id / title / aria-label), or a labeled leaf (a classed element with short text
-  // and no element children).
-  function isCandidate(el) {
+  // A DOM element worth mapping: an element carrying an explicit `data-gui` marker
+  // (author intent — the identity anchor), or an unambiguous interactive control
+  // with a stable label. Pure data leaves (classed text with no marker) are
+  // intentionally NOT candidates — that leaf-by-text branch was the noise source.
+  function isInteractiveControl(el) {
     const tag = el.tagName.toLowerCase();
-    if (['button', 'select', 'input', 'textarea'].includes(tag)) return true;
+    if (tag === 'button' || tag === 'select' || tag === 'input' || tag === 'textarea') return true;
     if (tag === 'a' && el.getAttribute('href')) return true;
-    if (el.getAttribute('contenteditable') === 'true') return true;
+    if (el.isContentEditable || el.getAttribute('contenteditable') === 'true') return true;
     if (el.getAttribute('role') === 'button') return true;
-    if (el.id) return true;
-    if (el.getAttribute('title') || el.getAttribute('aria-label')) return true;
-    if (el.className && typeof el.className === 'string' && el.children.length === 0) {
-      const t = (el.textContent || '').trim();
-      if (t.length > 0 && t.length <= 80) return true;
-    }
+    return false;
+  }
+
+  function isCandidate(el) {
+    if (el.hasAttribute('data-gui')) return true;   // explicit author intent (the identity anchor)
+    if (isInteractiveControl(el)) return true;      // unambiguous control with a stable label
     return false;
   }
 
@@ -239,23 +246,29 @@
   }
   function clip(s) { s = String(s).replace(/\s+/g, ' ').trim(); return s.length <= 60 ? s : s.slice(0, 57) + '…'; }
 
-  function nameOf(el) {
-    const tag = el.tagName.toLowerCase();
-    const title = el.getAttribute('title');
-    if (title && title.trim() && !isNoisy(title)) return clip(title);
-    const aria = el.getAttribute('aria-label');
-    if (aria && aria.trim() && !isNoisy(aria)) return clip(aria);
-    if (tag === 'input') { const ph = el.getAttribute('placeholder'); if (ph && ph.trim() && !isNoisy(ph)) return clip(ph); }
+  // Stable label for an UNMARKED interactive control: never free-text-first as identity,
+  // but a short fixed caption IS an acceptable label (every DATA-labelled control is marked,
+  // so unmarked text is a stable caption like "Send", "Save", "Approve & auto-accept edits").
+  function controlLabel(el) {
+    const aria = el.getAttribute('aria-label'); if (aria && aria.trim() && !isNoisy(aria)) return clip(aria);
+    const title = el.getAttribute('title');     if (title && title.trim() && !isNoisy(title)) return clip(title);
+    if (el.tagName.toLowerCase() === 'input') { const ph = el.getAttribute('placeholder'); if (ph && ph.trim() && !isNoisy(ph)) return clip(ph); }
     const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
-    // Short, non-volatile text is a good name; long text means a container (its
-    // concatenated children) — fall back to a class/id name instead.
-    if (txt && hasAlnum(txt) && !isNoisy(txt) && txt.length <= 60) return clip(txt);
-    // volatile / container / symbol-only / no usable text: fall back to a meaningful class, then id, then tag.
-    const mc = meaningfulClass(el);
-    if (mc) return humanize(mc);
+    if (txt && hasAlnum(txt) && !isNoisy(txt) && txt.length <= 48) return clip(txt);
     if (el.id) return humanize(el.id);
-    if (txt && hasAlnum(txt)) return clip(txt);
-    return tag;
+    const mc = meaningfulClass(el); if (mc) return humanize(mc);   // e.g. ✕-only buttons → class
+    return el.tagName.toLowerCase();
+  }
+
+  // Returns { slug, name } — slug is the handle tail (literal for markers).
+  function identity(el) {
+    if (el.hasAttribute('data-gui')) {
+      const slug = el.getAttribute('data-gui');
+      const name = el.getAttribute('data-gui-name') || humanize(slug);
+      return { slug, name };
+    }
+    const label = controlLabel(el);
+    return { slug: slugify(label), name: humanize(label) };
   }
 
   function descOf(el, name) {
@@ -273,27 +286,55 @@
     return { x: r.x, y: r.y, width: r.width, height: r.height };
   }
 
+  // Skip descendants of an element flagged `data-gui-opaque` (map the opaque element
+  // itself, but do NOT re-map its subtree — e.g. the read-only preview conv mirror).
+  function inOpaqueSubtree(el) {
+    const op = el.closest('[data-gui-opaque]');
+    return !!op && op !== el;
+  }
+
+  // Backstop for UNMARKED repeats we forgot to mark: collapse 3+ siblings that share a
+  // NON-EMPTY meaningful class within the same region/marked ancestor. Markers + byHandle
+  // already handle the intended collapses; this only catches a future un-marked data list.
+  // It deliberately does NOT fire for <3 members or for classless controls (so distinct
+  // fixed-label tabs/buttons are never merged).
+  function signature(el, area) {
+    const anchor = el.closest('[data-gui]');            // nearest marked ancestor (or null)
+    const anchorKey = anchor && anchor !== el ? anchor.getAttribute('data-gui') : area;
+    return area + '|' + el.tagName + '|' + meaningfulClass(el) + '|' + anchorKey;
+  }
+
   // Discover the elements visible in the currently-arranged DOM. Deduped by handle
   // within the state (so repeated identical elements — e.g. many session rows —
-  // collapse to one representative entry per kind).
+  // collapse to one representative entry per kind, because they share a marker slug).
   function discover(state) {
     const assigned = new Set();
     const byHandle = new Map();
     const add = (el, area, forcedName) => {
       if (assigned.has(el) || !visible(el)) return;
       assigned.add(el);
-      const name = (forcedName || nameOf(el) || el.tagName.toLowerCase()).trim() || el.tagName.toLowerCase();
-      const handle = 'GUI-' + area + '-' + slugify(name);
-      if (byHandle.has(handle)) return; // dedup by kind within this state
+      let slug, name;
+      if (forcedName) { name = forcedName; slug = slugify(forcedName); }   // captureRoot path, unchanged
+      else { ({ slug, name } = identity(el)); }
+      const handle = 'GUI-' + area + '-' + slug;
+      if (byHandle.has(handle)) return;                                    // folds repeats with the same slug
       byHandle.set(handle, { handle, name, area, description: descOf(el, name), rect: rectOf(el) });
     };
     for (const region of REGIONS) {
       for (const root of document.querySelectorAll(region.sel)) {
         if (!visible(root)) continue;
         if (region.captureRoot) add(root, region.area, region.rootName);
+        const sigCount = new Map();
         for (const el of root.querySelectorAll('*')) {
           if (assigned.has(el)) continue;
+          if (inOpaqueSubtree(el)) continue;
           if (!isCandidate(el)) continue;
+          // signature backstop: only for UNMARKED candidates with a non-empty class
+          if (!el.hasAttribute('data-gui') && meaningfulClass(el)) {
+            const sig = signature(el, region.area);
+            const n = (sigCount.get(sig) || 0) + 1; sigCount.set(sig, n);
+            if (n >= 3) continue;   // 3rd+ identical sibling → drop (keep the first representative)
+          }
           add(el, region.area);
         }
       }
@@ -341,5 +382,17 @@
       return { state, discovered: cap.elements.length };
     },
   };
+
+  // F3-1 determinism: freeze CSS transitions/animations once at init, before any
+  // capture. An element mid-transition has opacity<1 or a sub-final size, so it would
+  // flip in/out of visible()/rectOf() depending on timing (the run-to-run handle drift).
+  // Snapping every element to its final computed style makes discovery deterministic.
+  if (!document.getElementById('__guimap_freeze')) {
+    const freeze = document.createElement('style');
+    freeze.id = '__guimap_freeze';
+    freeze.textContent = '*,*::before,*::after{transition:none!important;animation:none!important}';
+    document.head.appendChild(freeze);
+  }
+
   return { ok: true, version: window.__guiMap.version, states: window.__guiMap.STATE_ORDER.length };
 })();

@@ -62,7 +62,7 @@ function toGlossary(allElements, { date } = {}) {
   const lines = [];
   lines.push('# cc-cockpit — GUI glossary (generated)');
   lines.push('');
-  lines.push('A map of the cockpit GUI surface, **auto-discovered from the live GUI** by the `/gui-map` skill — **do not edit by hand** (a re-run overwrites it). Element handles and names are derived mechanically from the DOM, so they are functional rather than carefully worded. Every area/element is keyed by a `GUI-<AREA>-<slug>` handle for cross-reference.');
+  lines.push('A map of the cockpit GUI surface, auto-discovered from the live GUI by the `/gui-map` skill — **do not edit by hand** (a re-run overwrites it). Each entry is a durable element identified by an inert `data-gui` marker in the product markup or by a stable interactive-control label; repeated structures collapse to one representative and pure data is excluded. Every element is keyed by a stable `GUI-<AREA>-<slug>` handle for cross-reference.');
   if (date) { lines.push(''); lines.push(`**Last generated: ${date}**`); }
   lines.push('');
   lines.push('Visual map (hover/click hotspots): [gui-map/map.html](gui-map/map.html).');
