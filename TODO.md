@@ -98,6 +98,7 @@ Built on `feat/gui-mode` this session:
 - [x] H6. Verify and, if needed, add file-path wrapping in the compose editor and in chat (revisit what image paste/drag introduced). Also detect quoted paths on paste - Windows auto-quotes copied file paths - and handle/strip the quotes.
 - [x] H7. User message bubbles should use the same width as Claude messages, not a narrower width that wastes vertical space through extra wrapping.
 - [x] H8. Render Claude output formatting in the GUI (markdown: code blocks, lists, emphasis, etc.). Research what formatting Claude emits in the terminal and support it.
+- [ ] H9. Make the 'working' status icon far more distinctive/legible - the spinning gear is too subtle to tell it's rotating at a glance. Add flavour: a slightly faster/zig-zag (wobble) rotation plus occasional emitted sparks. (Sessions are grouped by status already, but the icon is a valuable at-a-glance hint.)
 
 ## I. Documentation and project mapping
 - [x] I1. TPC5 - Brainstorm and design the living documentation system: a maintained current-state reference (features, mechanisms, options and parameters) plus guidelines to keep it current. Treat the old design docs as a historical changelog, NOT current-state docs (hallucination risk); new docs are the single source of truth.
