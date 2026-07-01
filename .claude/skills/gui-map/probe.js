@@ -226,6 +226,7 @@
     { sel: '#effort-select', slug: 'effort', name: 'Reasoning effort' },
     { sel: '#open-docs', slug: 'docs', name: 'Docs' },
     { sel: '#open-todomd', slug: 'todomd', name: 'TODO.md' },
+    { sel: '#overflow-btn', slug: 'overflow-menu', name: 'Overflow actions menu' },
     { sel: '#interrupt-btn', slug: 'interrupt', name: 'Interrupt turn' },
     // SIDEBAR status icon — after #head-state; constrained to SIDEBAR (.icon also on #head-state).
     { sel: '.icon', area: 'SIDEBAR', slug: 'status-icon', name: 'Status Icon' },

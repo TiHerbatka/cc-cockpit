@@ -45,6 +45,9 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .perm-raw { margin-top: 2px; }
 .perm-raw > summary { color: #888; font-size: 11px; cursor: pointer; }
 .perm-raw > .interaction-input { margin-top: 6px; }
+/* J6: transient confirmation toast (e.g. "Session ID copied"). */
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: #eee; border: 1px solid #4a4a50; border-radius: 6px; padding: 8px 14px; font-size: 12px; z-index: 1000; box-shadow: 0 6px 20px rgba(0,0,0,0.5); transition: opacity 0.4s; }
+.toast-out { opacity: 0; }
 .interaction-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .interaction-actions button { padding: 6px 12px; border-radius: 4px; border: 1px solid #3c3c3c; cursor: pointer; font-size: 12px; }
 .btn-allow { background: #2d4a2d; color: #cfe9cf; border-color: #3a5a3a; }

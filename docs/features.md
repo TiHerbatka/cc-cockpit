@@ -203,6 +203,19 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 
 **Last verified: 2026-06-29**
 
+### FEAT-overflow-menu — Header overflow (⋯) menu
+
+**What it does:** A ⋯ button at the end of the header opens a small menu of rarely-used per-session actions — one low-clutter place to grow into as more such actions are added.
+
+**Key facts:**
+- First (and currently only) action: **Copy session ID** — copies the focused session's Claude Code session id (`ccSessionId`) to the clipboard, with a brief "Session ID copied" toast on success; a clipboard failure is routed to the error center (see FEAT-error-center).
+- The session id is already carried on every session the client receives, so the copy is a pure client action (no server round-trip).
+- The button is disabled when no session is focused; the menu closes on outside-click or Escape.
+
+**Area:** the header overflow menu in the web client.
+
+**Last verified: 2026-07-01**
+
 ### FEAT-float-panels — Floating todo / topic panels
 
 **What it does:** Provides three header buttons that float a small overlay panel over the conversation for quick reference: this session's in-progress task list, its tracked topics, and the session folder's TODO.md.

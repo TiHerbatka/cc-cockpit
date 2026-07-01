@@ -153,6 +153,8 @@ function updateHead() {
   headState.textContent = s ? (STATE_ICON[s.status] || '○') : '';
   // Stop button is available only while a turn is running.
   if (interruptBtn) interruptBtn.hidden = !(s && s.status === 'working');
+  // Overflow menu acts on the focused session; disable it when there's none.
+  if (overflowBtn) overflowBtn.disabled = !s;
   // Feed the floating header panels: the focused session's topics live here;
   // in-session todos come from guiModel. Buttons act only on a focused session.
   currentTopics = s ? (s.topics || []) : [];
@@ -164,6 +166,7 @@ function updateHead() {
 // ---- Chips + controls: permission mode, usage, interrupt, model -------------
 const claudeModeEl = document.getElementById('claude-mode');
 const interruptBtn = document.getElementById('interrupt-btn');
+const overflowBtn = document.getElementById('overflow-btn');
 const usageEl = document.getElementById('usage-chip');
 const usageBarEl = document.getElementById('usage-bar');
 const modelSelect = document.getElementById('model-select');
@@ -244,6 +247,46 @@ if (effortSelect) effortSelect.onchange = () => { if (focusedId) ws.send(JSON.st
 // Doc buttons: open the focused session's local-docs.md / TODO.md via the OS default app.
 const openDocsBtn = document.getElementById('open-docs');
 if (openDocsBtn) openDocsBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'open-file', id: focusedId, which: 'docs' })); };
+
+// ---- Overflow (⋯) menu: a low-clutter home for rarely-used per-session actions.
+// First action: copy the focused session's Claude Code session id (ccSessionId),
+// which the client already receives on every session (J6).
+let overflowMenuEl = null;
+function closeOverflowMenu() { if (overflowMenuEl) { overflowMenuEl.remove(); overflowMenuEl = null; } }
+async function copySessionId(s) {
+  const id = s && s.ccSessionId;
+  if (!id) { errorCenter.add('No session id to copy'); return; }
+  try { await navigator.clipboard.writeText(id); showToast('Session ID copied'); }
+  catch (e) { errorCenter.add('Copy session ID failed — ' + ((e && e.message) || e)); }
+}
+function openOverflowMenu() {
+  closeOverflowMenu();
+  const s = sessions.find((x) => x.id === focusedId);
+  if (!s || !overflowBtn) return;
+  const menu = document.createElement('div'); menu.className = 'ctx-menu';
+  const items = [
+    { label: 'Copy session ID', act: () => copySessionId(s) },
+  ];
+  for (const it of items) {
+    const b = document.createElement('button'); b.className = 'ctx-item'; b.textContent = it.label;
+    b.onclick = () => { closeOverflowMenu(); it.act(); };
+    menu.appendChild(b);
+  }
+  document.body.appendChild(menu);
+  const rect = overflowBtn.getBoundingClientRect();
+  menu.style.left = Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8) + 'px';
+  menu.style.top = (rect.bottom + 4) + 'px';
+  overflowMenuEl = menu;
+}
+if (overflowBtn) overflowBtn.onclick = (e) => { e.stopPropagation(); openOverflowMenu(); };
+
+// A brief transient confirmation toast (self-removes). Used for copy-to-clipboard.
+function showToast(text) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = text;
+  document.body.appendChild(t);
+  setTimeout(() => { t.classList.add('toast-out'); }, 1600);
+  setTimeout(() => { t.remove(); }, 2100);
+}
 
 // ---- Floating todo/topic panels over the chat (one shared overlay) ----------
 // Each header button toggles this panel for its source. The data is what app.js
@@ -1075,5 +1118,5 @@ function openInteractionModal(req) {
   interactionOverlay = overlay;
 }
 
-document.addEventListener('click', () => { closeContextMenu(); closeModeMenu(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeContextMenu(); closePreview(); closeModeMenu(); } });
+document.addEventListener('click', () => { closeContextMenu(); closeModeMenu(); closeOverflowMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeContextMenu(); closePreview(); closeModeMenu(); closeOverflowMenu(); } });
