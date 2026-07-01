@@ -145,7 +145,10 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .gui-asst .md-list { margin: 4px 0; padding-left: 22px; }
 .gui-asst .md-list li { margin: 1px 0; }
 .gui-asst .md-quote { margin: 4px 0; padding: 2px 10px; border-left: 3px solid #4a4a50; color: #b0b0b0; }
-.gui-asst .md-code { margin: 6px 0; padding: 8px 10px; background: #1b1b1b; border: 1px solid #333; border-radius: 4px; overflow: auto; max-height: 360px; white-space: pre; font-family: Consolas, monospace; font-size: 12px; color: #d4d4d4; }
+/* Fenced code wraps (pre-wrap + word-break) like user/assistant/tool text rather
+   than scrolling horizontally, so skill output echoed as a code block doesn't
+   overflow the width. Indentation is preserved (pre-wrap); only long lines wrap. */
+.gui-asst .md-code { margin: 6px 0; padding: 8px 10px; background: #1b1b1b; border: 1px solid #333; border-radius: 4px; overflow: auto; max-height: 360px; white-space: pre-wrap; word-break: break-word; font-family: Consolas, monospace; font-size: 12px; color: #d4d4d4; }
 .gui-asst .md-icode { background: #2a2a2a; border: 1px solid #333; border-radius: 3px; padding: 0 4px; font-family: Consolas, monospace; font-size: 12px; color: #d4d4d4; }
 .gui-asst a { color: #9cdcfe; }
 .gui-asst hr { border: none; border-top: 1px solid #3a3a3a; margin: 8px 0; }
