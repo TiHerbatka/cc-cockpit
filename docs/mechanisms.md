@@ -53,11 +53,12 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 - Render model is `{ title, items, status }`; `items[]` are ordered entries of kind `user`, `assistant`, `thinking`, `tool` (with `id`, `name`, `input`, `status` of pending/ok/error, `resultText`), or `todos`.
 - The live fold returns delta ops: `append` (add an item), `update` (merge a patch into the tool item with that id), `title`, and `status` (replace the status block).
 - Todos aggregate from two sources — native TodoWrite full snapshots and the granular TaskCreate/TaskUpdate system (the task id arrives in the TaskCreate result, later referenced by TaskUpdate); the Task* aggregate wins when that system was used.
+- Non-human user records are not rendered as user turns: a `tool_result`-bearing user record resolves its pending tool instead; a `<`-prefixed body drops the `<command-*>` command wrappers; and an injected **meta** turn (skill scaffolding / slash-command expansion — flagged `isMeta: true`, or recognizable by the `Base directory for this skill:` body as a fallback) is dropped so it never appears as the user's own message. The `isMeta` flag is preserved from the live stream, not only read on resume.
 - Dependency-free and side-effect-free by design, so it is exhaustively unit-testable with an injected fake stream.
 
-**Area:** the conversation normalize fold.
+**Area:** the conversation normalize fold, and the live-stream-to-record mapper that preserves the meta flag.
 
-**Last verified: 2026-06-29**
+**Last verified: 2026-07-01**
 
 ### MECH-session-state — SDK-stream-driven session state
 

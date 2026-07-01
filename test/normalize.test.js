@@ -15,6 +15,22 @@ test('human prompt becomes a user item; system-reminder-prefixed content is igno
   assert.deepStrictEqual(m.items, [{ kind: 'user', text: 'Hello there' }]);
 });
 
+test('injected meta turns are dropped (isMeta flag)', () => {
+  // A skill/command scaffolding turn is flagged isMeta:true by Claude Code; it is
+  // not human input and must not render as a user bubble (J3).
+  const meta = { type: 'user', isMeta: true, message: { role: 'user', content: 'Base directory for this skill: C:\\x\n\n# Some Skill' } };
+  const m = normalize([userMsg('real prompt'), meta]);
+  assert.deepStrictEqual(m.items, [{ kind: 'user', text: 'real prompt' }]);
+});
+
+test('skill-scaffold body is dropped even without the isMeta flag (live fallback)', () => {
+  // If a code path loses the isMeta flag, the recognizable SKILL.md body prefix
+  // still identifies the injected turn.
+  const scaffold = userMsg('Base directory for this skill: C:\\y\n\n# TODO Manager\nDo things');
+  const m = normalize([scaffold, userMsg('actual question')]);
+  assert.deepStrictEqual(m.items, [{ kind: 'user', text: 'actual question' }]);
+});
+
 test('assistant text + thinking split into ordered items', () => {
   const m = normalize([asst([
     { type: 'thinking', thinking: 'hmm' },

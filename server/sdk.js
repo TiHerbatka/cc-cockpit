@@ -31,7 +31,9 @@ function scrubParentClaudeEnv(env) {
 function sdkMessageToRecords(msg) {
   if (!msg || !msg.type) return [];
   if (msg.type === 'assistant') return [{ type: 'assistant', message: msg.message }];
-  if (msg.type === 'user') return [{ type: 'user', message: msg.message }];
+  // Preserve isMeta so the fold can drop injected meta turns (skill scaffolding,
+  // command expansions) in the live stream too, not only on resume (J3).
+  if (msg.type === 'user') return [{ type: 'user', message: msg.message, isMeta: msg.isMeta }];
   return [];
 }
 

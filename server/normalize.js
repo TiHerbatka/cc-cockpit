@@ -32,6 +32,19 @@ function textFromContent(content) {
   return '';
 }
 
+// Claude Code injects "meta" user turns that are NOT human input: skill
+// scaffolding (the SKILL.md body, prefixed "Base directory for this skill:"),
+// slash-command expansions, and local-command output. The terminal shows only
+// the command name, never the body, so we must not render these as the user's
+// own message (J3). Primary signal: the transcript flags them `isMeta: true`
+// (preserved from the live stream by sdkMessageToRecords). Fallback: the
+// recognizable skill-scaffold body prefix, in case a path loses the flag.
+// (The pre-existing `<`-prefix filter already drops the `<command-*>` wrappers.)
+function isInjectedMetaTurn(record, text) {
+  if (record && record.isMeta) return true;
+  return typeof text === 'string' && text.startsWith('Base directory for this skill:');
+}
+
 function resultText(content) {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -104,7 +117,7 @@ function createConversation() {
         return ops;
       }
       const text = textFromContent(content);
-      if (text && !text.startsWith('<')) {
+      if (text && !text.startsWith('<') && !isInjectedMetaTurn(r, text)) {
         const item = { kind: 'user', text };
         items.push(item);
         ops.push({ op: 'append', item });

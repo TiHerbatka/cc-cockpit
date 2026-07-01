@@ -11,12 +11,21 @@ test('sdkMessageToRecords maps assistant and user messages, ignores the rest', (
   );
   assert.deepStrictEqual(
     sdkMessageToRecords({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't', content: 'x' }] } }),
-    [{ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't', content: 'x' }] } }],
+    [{ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't', content: 'x' }] }, isMeta: undefined }],
   );
   assert.deepStrictEqual(sdkMessageToRecords({ type: 'system', subtype: 'init' }), []);
   assert.deepStrictEqual(sdkMessageToRecords({ type: 'result', subtype: 'success' }), []);
   assert.deepStrictEqual(sdkMessageToRecords({ type: 'rate_limit_event' }), []);
   assert.deepStrictEqual(sdkMessageToRecords(null), []);
+});
+
+test('sdkMessageToRecords preserves isMeta on user messages (J3)', () => {
+  // An injected meta turn in the live stream must carry its flag through so the
+  // fold can drop it, just as it does on resume.
+  assert.deepStrictEqual(
+    sdkMessageToRecords({ type: 'user', isMeta: true, message: { content: 'Base directory for this skill: x' } }),
+    [{ type: 'user', message: { content: 'Base directory for this skill: x' }, isMeta: true }],
+  );
 });
 
 test('scrubChildEnv removes parent markers and direct-auth overrides, keeps PATH', () => {
