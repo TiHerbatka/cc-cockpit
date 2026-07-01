@@ -208,11 +208,24 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 **What it does:** A ⋯ button at the end of the header opens a small menu of rarely-used per-session actions — one low-clutter place to grow into as more such actions are added.
 
 **Key facts:**
-- First (and currently only) action: **Copy session ID** — copies the focused session's Claude Code session id (`ccSessionId`) to the clipboard, with a brief "Session ID copied" toast on success; a clipboard failure is routed to the error center (see FEAT-error-center).
-- The session id is already carried on every session the client receives, so the copy is a pure client action (no server round-trip).
+- **Copy session ID** — copies the focused session's Claude Code session id (`ccSessionId`) to the clipboard, with a brief "Session ID copied" toast on success; a clipboard failure is routed to the error center (see FEAT-error-center). The session id is already carried on every session the client receives, so the copy is a pure client action (no server round-trip).
+- **Display** override — Focus / Normal / Verbose radio-style items (the active one checked) that override the detail level the cockpit renders at, on top of the setting read from your Claude config (see FEAT-display-mode).
 - The button is disabled when no session is focused; the menu closes on outside-click or Escape.
 
 **Area:** the header overflow menu in the web client.
+
+**Last verified: 2026-07-01**
+
+### FEAT-display-mode — Display detail level (focus / normal / verbose)
+
+**What it does:** Renders the conversation at the detail level you already use in the terminal, by reading your Claude Code display settings — a quiet folded view, the normal view, or a fully expanded view — with a manual override in the ⋯ menu.
+
+**Key facts:**
+- Seeded from your Claude settings: `viewMode: "focus"` → the folded **focus** view; `verbose: true` → the fully expanded **verbose** view; neither → **normal**. `verbose` wins when both are set, matching Claude's own documented precedence. (Mechanism + precedence source: MECH-display-mode.)
+- **Focus** collapses each turn's intermediate reasoning to a one-line summary (kept expandable) and folds tool activity into collapsed groups, while keeping your prompts and each turn's final answer expanded. **Verbose** expands tool input/output and thinking. **Normal** is the default rendering.
+- The ⋯ menu's Display items override the seeded mode for the session; the override wins until changed.
+
+**Area:** the conversation render in the web client, driven by the display-mode read from Claude settings.
 
 **Last verified: 2026-07-01**
 

@@ -83,10 +83,25 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 - `attach` acknowledges (focuses) the session and re-sends a snapshot plus any still-pending interaction; `gui-attach` only re-sends a snapshot; `gui-detach` is a no-op because deltas are broadcast to every client.
 - `peek` is a side-effect-free read for Quick preview: it returns the session's current model (`peeked`) WITHOUT focusing/acknowledging it; live updates ride the broadcast `gui-delta` (the client filters by preview id).
 - `meta` carries per-session mode/model/usage/effort; `sessions` carries the live session list; `interaction-request` surfaces a pending prompt to answer.
+- `display-mode` is sent once per connection: the user's effective Claude display preference (`viewMode`/`verbose` plus the derived `mode`) so the client renders at the same detail level the terminal would (see `MECH-display-mode`).
 
 **Area:** the server↔client WebSocket bridge.
 
-**Last verified: 2026-06-29**
+**Last verified: 2026-07-01**
+
+### MECH-display-mode — Claude display-preference mirroring
+
+**What it does:** The cockpit reads the user's persisted Claude Code display preferences and renders the conversation at the same detail level the terminal would — folding reasoning and tool detail in the quiet view, or expanding everything in the full view.
+
+**Key facts:**
+- Two settings in the user's Claude settings file drive it: `viewMode: "focus"` (the `/focus` quiet view) and `verbose: true` (full turn-by-turn output). Read best-effort — a missing/malformed file or absent keys degrades to `normal`.
+- Precedence is Claude's own, documented one: **`verbose` overrides `viewMode`** (the CLI reference states `--verbose` "Overrides the viewMode setting"). Derived mode = `verbose ? 'verbose' : viewMode === 'focus' ? 'focus' : 'normal'`.
+- `focus` folds each turn's reasoning (intermediate assistant prose + thinking) and tool activity, keeping your prompts and each turn's final answer; `verbose` expands tool input/output; `normal` is the default rendering. The client seeds from this and offers a manual override.
+- `viewMode` is an **undocumented** settings key, so it is treated as best-effort. v1 reads the user-level settings file only (the tier merge across project/local settings is a later refinement).
+
+**Area:** the Claude-settings reader and the per-connection display-mode message on the WebSocket bridge.
+
+**Last verified: 2026-07-01**
 
 ### MECH-session-registry — In-memory session registry
 

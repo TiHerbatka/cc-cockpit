@@ -9,6 +9,7 @@ const projects = require('./projects');
 const recent = require('./recent');
 const { readTopics } = require('./topics');
 const { findTranscriptPath } = require('./transcript');
+const claudeSettings = require('./claude-settings');
 const uploads = require('./uploads');
 const { parseTodoMd } = require('./todomd');
 
@@ -40,7 +41,7 @@ const MIME = {
 // pre-flight check so the cockpit can report the real cause. It is injected (not a
 // hard fs call) so the pure server stays testable with synthetic cwds; the default
 // is permissive and the real check is wired in production (server/index.js).
-function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot = projects.projectsRoot(), claudeDir, openInExplorer = defaultOpenInExplorer, openFile = defaultOpenFile, dirExists = () => true, renameStorePath } = {}) {
+function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot = projects.projectsRoot(), claudeDir, openInExplorer = defaultOpenInExplorer, openFile = defaultOpenFile, dirExists = () => true, renameStorePath, readDisplayMode = claudeSettings.readDisplayMode } = {}) {
   // On resume, read the prior transcript so the registry can seed the model.
   const loadResumeRecords = (ccSessionId) => {
     try {
@@ -180,6 +181,10 @@ function createApp({ spawnDriver, publicDir = DEFAULT_PUBLIC_DIR, projectsRoot =
   wss.on('connection', (ws) => {
     clients.add(ws);
     ws.send(JSON.stringify({ type: 'sessions', sessions: registry.list() }));
+    // Tell the client the user's Claude display preference (viewMode/verbose) so it
+    // renders at the same detail level the terminal would (FEAT-display-mode). Read
+    // per-connection so a reload picks up a /focus toggle made while the app is up.
+    try { ws.send(JSON.stringify({ type: 'display-mode', ...readDisplayMode({ claudeDir }) })); } catch { /* best-effort */ }
 
     ws.on('message', (raw) => {
       let m;

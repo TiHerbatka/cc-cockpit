@@ -85,6 +85,25 @@ test('create over WS produces a session and broadcasts it', async () => {
   await new Promise((r) => server.close(r));
 });
 
+test('a connecting client receives the display-mode from settings (J4)', { timeout: 10000 }, async () => {
+  const { factory } = fakeDriverFactory();
+  const { server } = createApp({
+    spawnDriver: factory,
+    readDisplayMode: () => ({ viewMode: 'focus', verbose: true, mode: 'verbose' }),
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  // display-mode is sent on connect, so attach the listener BEFORE the socket
+  // opens — awaiting 'open' first would race the message and could miss it.
+  const dm = await nextMessage(ws, (m) => m.type === 'display-mode');
+  assert.strictEqual(dm.mode, 'verbose'); // verbose overrides focus (documented)
+  assert.strictEqual(dm.viewMode, 'focus');
+  assert.strictEqual(dm.verbose, true);
+  ws.close();
+  await new Promise((r) => server.close(r));
+});
+
 test('an assistant message from the driver broadcasts a gui-delta', async () => {
   const { factory, drivers } = fakeDriverFactory();
   const { server } = createApp({ spawnDriver: factory });

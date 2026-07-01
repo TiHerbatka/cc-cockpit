@@ -29,6 +29,46 @@ function keyArg(name, input) {
 
 const TODO_GLYPH = { completed: '✓', in_progress: '▸', pending: '○', cancelled: '✗', deleted: '✗' };
 
+// Display mode (J4 / FEAT-display-mode): how much conversation detail to show,
+// mirroring the user's Claude viewMode/verbose. Each mode is a small config the
+// renderer reads:
+//   groupThreshold — collapse a run of >= N consecutive tool cards into one group
+//                    (1 = fold every run; Infinity = never group)
+//   openTools      — render tool cards with their input/output expanded
+//   openThinking   — render thinking blocks expanded
+//   foldReasoning  — collapse each turn's intermediate assistant prose to a
+//                    one-line summary (the turn's final answer stays expanded)
+const DISPLAY_MODES = {
+  normal:  { groupThreshold: 3,        openTools: false, openThinking: false, foldReasoning: false },
+  focus:   { groupThreshold: 1,        openTools: false, openThinking: false, foldReasoning: true },
+  verbose: { groupThreshold: Infinity, openTools: true,  openThinking: true,  foldReasoning: false },
+};
+function modeCfg(mode) { return DISPLAY_MODES[mode] || DISPLAY_MODES.normal; }
+
+// Pure (unit-tested): the set of assistant-text items that are the LAST assistant
+// message of their turn — i.e. that turn's final answer. A user prompt starts a
+// turn; the last assistant item before the next prompt (or the end) is its final
+// answer. Focus mode keeps these expanded and folds the rest as reasoning.
+function finalAnswerItems(items) {
+  const finals = new Set();
+  let lastAsst = null;
+  for (const it of items || []) {
+    if (!it) continue;
+    if (it.kind === 'user') { if (lastAsst) finals.add(lastAsst); lastAsst = null; }
+    else if (it.kind === 'assistant') lastAsst = it;
+  }
+  if (lastAsst) finals.add(lastAsst);
+  return finals;
+}
+
+// First non-empty line of a block, truncated — the summary shown for a folded
+// (focus-mode) reasoning message.
+function firstLine(s) {
+  s = String(s == null ? '' : s).trim();
+  const nl = s.indexOf('\n');
+  return truncate(nl >= 0 ? s.slice(0, nl) : s, 100);
+}
+
 function renderStatus(el, model) {
   const st = (model && model.status) || {};
   const bits = [];
@@ -59,20 +99,38 @@ function wireDetails(details, key, openKeys) {
   });
 }
 
-function itemEl(it, openKeys) {
+function itemEl(it, openKeys, cfg = DISPLAY_MODES.normal, foldAssistant = false) {
   const div = document.createElement('div');
   if (it.kind === 'user') {
     div.className = 'gui-user';
     div.textContent = it.text;
   } else if (it.kind === 'assistant') {
     div.className = 'gui-asst';
-    // Render Claude's markdown (H8). renderMarkdown is XSS-safe (escapes first); fall
-    // back to plain text if the module somehow didn't load.
-    if (window.renderMarkdown) div.innerHTML = window.renderMarkdown(it.text);
-    else div.textContent = it.text;
+    if (foldAssistant) {
+      // Focus mode: collapse intermediate reasoning into a foldable one-liner; the
+      // turn's final answer is rendered normally (not folded) by the caller.
+      div.classList.add('gui-asst-folded');
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.className = 'gui-asst-sum';
+      summary.textContent = firstLine(it.text);
+      const body = document.createElement('div');
+      body.className = 'gui-asst-body';
+      if (window.renderMarkdown) body.innerHTML = window.renderMarkdown(it.text);
+      else body.textContent = it.text;
+      details.append(summary, body);
+      div.appendChild(details);
+      wireDetails(details, 'asst:' + firstLine(it.text), openKeys);
+    } else if (window.renderMarkdown) {
+      // Render Claude's markdown (H8). renderMarkdown is XSS-safe (escapes first);
+      // fall back to plain text if the module somehow didn't load.
+      div.innerHTML = window.renderMarkdown(it.text);
+    } else {
+      div.textContent = it.text;
+    }
   } else if (it.kind === 'thinking') {
     div.className = 'gui-think';
-    div.innerHTML = `<details><summary>thinking</summary><div></div></details>`;
+    div.innerHTML = `<details${cfg.openThinking ? ' open' : ''}><summary>thinking</summary><div></div></details>`;
     div.querySelector('div').textContent = it.text;
   } else if (it.kind === 'todos') {
     div.className = 'gui-todoblock';
@@ -88,7 +146,7 @@ function itemEl(it, openKeys) {
   } else if (it.kind === 'tool') {
     div.className = `gui-tool tool-${esc(it.status)}`;
     const head = `${esc(it.name)} ${esc(keyArg(it.name, it.input))}`;
-    div.innerHTML = `<details><summary><span class="tool-dot"></span>${head}</summary>`
+    div.innerHTML = `<details${cfg.openTools ? ' open' : ''}><summary><span class="tool-dot"></span>${head}</summary>`
       + `<pre class="tool-in"></pre><pre class="tool-out"></pre></details>`;
     div.querySelector('.tool-in').textContent = JSON.stringify(it.input, null, 2);
     div.querySelector('.tool-out').textContent = it.resultText == null ? '' : it.resultText;
@@ -103,7 +161,7 @@ function itemEl(it, openKeys) {
 // A7 (pure, unit-tested): split the item list into render segments, collapsing any
 // run of 3+ consecutive tool items into one group. Returns an ordered array of
 // { type:'group', items:[...] } | { type:'item', item }. Runs of 1–2 stay inline.
-function groupConsecutiveTools(items) {
+function groupConsecutiveTools(items, threshold = 3) {
   const arr = items || [];
   const out = [];
   let i = 0;
@@ -112,7 +170,7 @@ function groupConsecutiveTools(items) {
       let j = i;
       while (j < arr.length && arr[j] && arr[j].kind === 'tool') j++;
       const run = arr.slice(i, j);
-      if (run.length > 2) out.push({ type: 'group', items: run });
+      if (run.length >= threshold) out.push({ type: 'group', items: run });
       else for (const it of run) out.push({ type: 'item', item: it });
       i = j;
     } else {
@@ -127,7 +185,7 @@ function groupConsecutiveTools(items) {
 // collapsed by default; expanding it reveals the individual tool cards, each still
 // its own expandable card. The left border reflects the worst status in the run
 // (pending > error > ok) so the user can triage without unfolding.
-function toolGroupEl(run, openKeys) {
+function toolGroupEl(run, openKeys, cfg = DISPLAY_MODES.normal) {
   const errs = run.filter((t) => t.status === 'error').length;
   const pending = run.some((t) => t.status === 'pending');
   const cls = pending ? 'tg-pending' : errs ? 'tg-error' : 'tg-ok';
@@ -143,20 +201,29 @@ function toolGroupEl(run, openKeys) {
   details.appendChild(summary);
   const body = document.createElement('div');
   body.className = 'gui-tool-group-body';
-  for (const it of run) body.appendChild(itemEl(it, openKeys));
+  for (const it of run) body.appendChild(itemEl(it, openKeys, cfg));
   details.appendChild(body);
   // Key the group by its first tool's id so it stays open as the run grows (A7 + open-state).
   if (run[0] && run[0].id != null) wireDetails(details, 'group:' + run[0].id, openKeys);
   return details;
 }
 
-function renderLog(el, model, openKeys) {
+function renderLog(el, model, openKeys, mode) {
+  const cfg = modeCfg(mode);
   const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   el.innerHTML = '';
   const items = (model && model.items) || [];
+  // In focus mode, keep each turn's final answer expanded and fold the rest.
+  const finals = cfg.foldReasoning ? finalAnswerItems(items) : null;
   const frag = document.createDocumentFragment();
-  for (const seg of groupConsecutiveTools(items)) {
-    frag.appendChild(seg.type === 'group' ? toolGroupEl(seg.items, openKeys) : itemEl(seg.item, openKeys));
+  for (const seg of groupConsecutiveTools(items, cfg.groupThreshold)) {
+    if (seg.type === 'group') {
+      frag.appendChild(toolGroupEl(seg.items, openKeys, cfg));
+    } else {
+      const it = seg.item;
+      const fold = !!(cfg.foldReasoning && it && it.kind === 'assistant' && finals && !finals.has(it));
+      frag.appendChild(itemEl(it, openKeys, cfg, fold));
+    }
   }
   el.appendChild(frag);
   if (atBottom) el.scrollTop = el.scrollHeight;
@@ -180,6 +247,11 @@ function mountGui(container, handlers) {
   // card the user is reading isn't snapped shut by a new streaming token (reset on
   // session switch — see clear()).
   const openKeys = new Set();
+  // Current display mode (FEAT-display-mode) + the last model rendered, so a mode
+  // change (from the server preference or the manual override) can re-render the
+  // log in place without waiting for the next delta.
+  let mode = 'normal';
+  let lastModel = null;
 
   // Topics + in-session todos now render in app.js's floating header panels
   // (the In-session todo / Topics / TODO.MD buttons), not in in-pane panels here.
@@ -457,8 +529,10 @@ function mountGui(container, handlers) {
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { closeImgCtxMenu(); closePastePopup(); } });
 
   return {
-    update(model) { renderStatus(statusEl, model); renderLog(logEl, model, openKeys); },
-    clear() { statusEl.innerHTML = ''; statusEl.hidden = true; logEl.innerHTML = ''; waitEl.hidden = true; closePastePopup(); openKeys.clear(); },
+    update(model) { lastModel = model; renderStatus(statusEl, model); renderLog(logEl, model, openKeys, mode); },
+    // Switch display mode (focus / normal / verbose) and re-render the current log.
+    setMode(m) { mode = m; if (lastModel) renderLog(logEl, lastModel, openKeys, mode); },
+    clear() { statusEl.innerHTML = ''; statusEl.hidden = true; logEl.innerHTML = ''; waitEl.hidden = true; lastModel = null; closePastePopup(); openKeys.clear(); },
     focusCompose() { editor.focus(); },
     // Show/hide the "Waiting for Claude…" spinner shown between a send and Claude's
     // first output of the turn (H3). Driven by app.js's awaitingResponse logic.
@@ -479,5 +553,5 @@ function renderGuiModel(container, model) {
 
 // Dual export (same pattern as compose.js): browser gets globals; node --test can
 // require the pure helpers (groupConsecutiveTools) without a DOM.
-if (typeof module !== 'undefined' && module.exports) module.exports = { groupConsecutiveTools };
+if (typeof module !== 'undefined' && module.exports) module.exports = { groupConsecutiveTools, finalAnswerItems, DISPLAY_MODES, modeCfg };
 if (typeof window !== 'undefined') { window.mountGui = mountGui; window.renderGuiModel = renderGuiModel; }

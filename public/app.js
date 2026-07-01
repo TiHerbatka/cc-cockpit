@@ -248,9 +248,21 @@ if (effortSelect) effortSelect.onchange = () => { if (focusedId) ws.send(JSON.st
 const openDocsBtn = document.getElementById('open-docs');
 if (openDocsBtn) openDocsBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'open-file', id: focusedId, which: 'docs' })); };
 
+// ---- Display mode (FEAT-display-mode): focus / normal / verbose -------------
+// Seeded from the server's read of the user's Claude viewMode/verbose (the
+// display-mode message); the ⋯ menu can override it for the rest of the session.
+// The override, once set, wins over the server's preference.
+const DISPLAY_LABELS = { focus: 'Focus', normal: 'Normal', verbose: 'Verbose' };
+let serverDisplayMode = 'normal';
+let displayOverride = null;
+function effectiveDisplayMode() { return displayOverride || serverDisplayMode; }
+function applyDisplayMode() { gui.setMode(effectiveDisplayMode()); }
+function setDisplayOverride(mode) { displayOverride = mode; applyDisplayMode(); }
+
 // ---- Overflow (⋯) menu: a low-clutter home for rarely-used per-session actions.
 // First action: copy the focused session's Claude Code session id (ccSessionId),
-// which the client already receives on every session (J6).
+// which the client already receives on every session (J6). It also hosts the
+// display-mode override (Focus / Normal / Verbose).
 let overflowMenuEl = null;
 function closeOverflowMenu() { if (overflowMenuEl) { overflowMenuEl.remove(); overflowMenuEl = null; } }
 async function copySessionId(s) {
@@ -264,10 +276,19 @@ function openOverflowMenu() {
   const s = sessions.find((x) => x.id === focusedId);
   if (!s || !overflowBtn) return;
   const menu = document.createElement('div'); menu.className = 'ctx-menu';
+  const cur = effectiveDisplayMode();
   const items = [
     { label: 'Copy session ID', act: () => copySessionId(s) },
+    { sep: true },
+    { header: 'Display' },
+    ...['focus', 'normal', 'verbose'].map((mode) => ({
+      label: (cur === mode ? '✓ ' : ' ') + DISPLAY_LABELS[mode],
+      act: () => setDisplayOverride(mode),
+    })),
   ];
   for (const it of items) {
+    if (it.sep) { const d = document.createElement('div'); d.className = 'ctx-sep'; menu.appendChild(d); continue; }
+    if (it.header) { const h = document.createElement('div'); h.className = 'ctx-header'; h.textContent = it.header; menu.appendChild(h); continue; }
     const b = document.createElement('button'); b.className = 'ctx-item'; b.textContent = it.label;
     b.onclick = () => { closeOverflowMenu(); it.act(); };
     menu.appendChild(b);
@@ -495,6 +516,11 @@ ws.addEventListener('message', (ev) => {
   } else if (m.type === 'interaction-request' && m.id === focusedId) {
     stopWaiting(); // a prompt means Claude is now waiting on the user, not "starting"
     openInteractionModal(m);
+  } else if (m.type === 'display-mode') {
+    // The user's Claude display preference (viewMode/verbose). Seeds the render
+    // detail level unless the user has manually overridden it via the ⋯ menu.
+    serverDisplayMode = m.mode || 'normal';
+    if (!displayOverride) applyDisplayMode();
   } else if (m.type === 'error') {
     // Server errors (e.g. local-docs/TODO "not found") go to the error center only,
     // not the bottom-left #error element (B7).

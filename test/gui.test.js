@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { groupConsecutiveTools } = require('../public/gui');
+const { groupConsecutiveTools, finalAnswerItems, modeCfg, DISPLAY_MODES } = require('../public/gui');
 
 const tool = (id) => ({ kind: 'tool', id, name: 'Bash', status: 'ok' });
 const user = (text) => ({ kind: 'user', text });
@@ -38,4 +38,47 @@ test('groupConsecutiveTools: non-tool items break runs and pass through in order
   // the trailing 2-run stays inline
   assert.deepEqual(segs[3].item, tool(4));
   assert.deepEqual(segs[4].item, tool(5));
+});
+
+test('groupConsecutiveTools: threshold 1 folds every run (focus mode)', () => {
+  const segs = groupConsecutiveTools([tool(1), tool(2)], 1);
+  assert.equal(segs.length, 1);
+  assert.equal(segs[0].type, 'group');
+  assert.equal(segs[0].items.length, 2);
+  // a lone tool also groups at threshold 1
+  assert.equal(groupConsecutiveTools([tool(9)], 1)[0].type, 'group');
+});
+
+test('groupConsecutiveTools: threshold Infinity never groups (verbose mode)', () => {
+  const segs = groupConsecutiveTools([tool(1), tool(2), tool(3), tool(4)], Infinity);
+  assert.deepEqual(segs.map((s) => s.type), ['item', 'item', 'item', 'item']);
+});
+
+test('modeCfg: known modes + fallback to normal', () => {
+  assert.strictEqual(modeCfg('focus'), DISPLAY_MODES.focus);
+  assert.strictEqual(modeCfg('verbose'), DISPLAY_MODES.verbose);
+  assert.strictEqual(modeCfg('normal'), DISPLAY_MODES.normal);
+  assert.strictEqual(modeCfg(undefined), DISPLAY_MODES.normal);
+  assert.strictEqual(modeCfg('bogus'), DISPLAY_MODES.normal);
+});
+
+test('finalAnswerItems: last assistant of each turn is the final answer', () => {
+  // turn 1: reasoning a1, final a2 ; turn 2: only a3 (final)
+  const a1 = asst('reasoning'), a2 = asst('answer 1'), a3 = asst('answer 2');
+  const items = [user('q1'), a1, tool(1), a2, user('q2'), a3];
+  const finals = finalAnswerItems(items);
+  assert.ok(finals.has(a2) && finals.has(a3));
+  assert.ok(!finals.has(a1));
+  assert.equal(finals.size, 2);
+});
+
+test('finalAnswerItems: trailing assistant with no following prompt is final', () => {
+  const a = asst('only answer');
+  const finals = finalAnswerItems([user('q'), a]);
+  assert.ok(finals.has(a));
+});
+
+test('finalAnswerItems: empty / no assistant -> empty set', () => {
+  assert.equal(finalAnswerItems([]).size, 0);
+  assert.equal(finalAnswerItems([user('q'), tool(1)]).size, 0);
 });
