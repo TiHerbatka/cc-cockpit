@@ -530,8 +530,13 @@ function mountGui(container, handlers) {
 
   return {
     update(model) { lastModel = model; renderStatus(statusEl, model); renderLog(logEl, model, openKeys, mode); },
-    // Switch display mode (focus / normal / verbose) and re-render the current log.
-    setMode(m) { mode = m; if (lastModel) renderLog(logEl, lastModel, openKeys, mode); },
+    // Switch display mode (focus / normal / verbose) and re-render. Reset per-card
+    // open-state to the new mode's defaults: a mode's auto-opened cards (e.g.
+    // verbose) otherwise leak into openKeys and stay open after switching to a
+    // more-folded mode. (Streaming deltas go through update(), which keeps openKeys,
+    // so a card the user opened mid-turn still persists — only an explicit mode
+    // change resets.)
+    setMode(m) { if (m === mode) return; mode = m; openKeys.clear(); if (lastModel) renderLog(logEl, lastModel, openKeys, mode); },
     clear() { statusEl.innerHTML = ''; statusEl.hidden = true; logEl.innerHTML = ''; waitEl.hidden = true; lastModel = null; closePastePopup(); openKeys.clear(); },
     focusCompose() { editor.focus(); },
     // Show/hide the "Waiting for Claude…" spinner shown between a send and Claude's
