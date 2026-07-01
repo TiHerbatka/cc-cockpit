@@ -248,11 +248,11 @@ if (effortSelect) effortSelect.onchange = () => { if (focusedId) ws.send(JSON.st
 const openDocsBtn = document.getElementById('open-docs');
 if (openDocsBtn) openDocsBtn.onclick = () => { if (focusedId) ws.send(JSON.stringify({ type: 'open-file', id: focusedId, which: 'docs' })); };
 
-// ---- Display mode (FEAT-display-mode): focus / normal / verbose -------------
+// ---- Display mode (FEAT-display-mode): focus / focus+ / normal / verbose ----
 // Seeded from the server's read of the user's Claude viewMode/verbose (the
 // display-mode message); the ⋯ menu can override it for the rest of the session.
 // The override, once set, wins over the server's preference.
-const DISPLAY_LABELS = { focus: 'Focus', normal: 'Normal', verbose: 'Verbose' };
+const DISPLAY_LABELS = { focus: 'Focus', 'focus+': 'Focus+', normal: 'Normal', verbose: 'Verbose' };
 let serverDisplayMode = 'normal';
 let displayOverride = null;
 function effectiveDisplayMode() { return displayOverride || serverDisplayMode; }
@@ -281,7 +281,7 @@ function openOverflowMenu() {
     { label: 'Copy session ID', act: () => copySessionId(s) },
     { sep: true },
     { header: 'Display' },
-    ...['focus', 'normal', 'verbose'].map((mode) => ({
+    ...['focus', 'focus+', 'normal', 'verbose'].map((mode) => ({
       label: (cur === mode ? '✓ ' : ' ') + DISPLAY_LABELS[mode],
       act: () => setDisplayOverride(mode),
     })),

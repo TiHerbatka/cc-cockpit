@@ -29,26 +29,30 @@ function keyArg(name, input) {
 
 const TODO_GLYPH = { completed: '✓', in_progress: '▸', pending: '○', cancelled: '✗', deleted: '✗' };
 
-// Display mode (J4 / FEAT-display-mode): how much conversation detail to show,
-// mirroring the user's Claude viewMode/verbose. Each mode is a small config the
-// renderer reads:
-//   groupThreshold — collapse a run of >= N consecutive tool cards into one group
-//                    (1 = fold every run; Infinity = never group)
+// Display mode (FEAT-display-mode): how much conversation detail to show, seeded
+// from the user's Claude viewMode/verbose. Each mode is a small config the renderer
+// reads. The two "focus" modes match the terminal by HIDING intermediate detail
+// (not folding it); focus+ is a cockpit-only variant that keeps Claude's prose.
+//   groupThreshold — collapse a run of >= N consecutive tools into one summary group
+//                    (1 folds every run; with intermediate prose hidden, a turn's
+//                    tools merge into one per-turn summary; Infinity never groups)
 //   openTools      — render tool cards with their input/output expanded
 //   openThinking   — render thinking blocks expanded
-//   foldReasoning  — collapse each turn's intermediate assistant prose to a
-//                    one-line summary (the turn's final answer stays expanded)
+//   dropThinking   — remove thinking blocks entirely
+//   prose          — 'all' shows every assistant message; 'final' shows only each
+//                    turn's final answer (intermediate prose hidden, terminal focus)
 const DISPLAY_MODES = {
-  normal:  { groupThreshold: 3,        openTools: false, openThinking: false, foldReasoning: false },
-  focus:   { groupThreshold: 1,        openTools: false, openThinking: false, foldReasoning: true },
-  verbose: { groupThreshold: Infinity, openTools: true,  openThinking: true,  foldReasoning: false },
+  focus:    { groupThreshold: 1,        openTools: false, openThinking: false, dropThinking: true,  prose: 'final' },
+  'focus+': { groupThreshold: 1,        openTools: false, openThinking: false, dropThinking: false, prose: 'all' },
+  normal:   { groupThreshold: 3,        openTools: false, openThinking: false, dropThinking: false, prose: 'all' },
+  verbose:  { groupThreshold: Infinity, openTools: true,  openThinking: true,  dropThinking: false, prose: 'all' },
 };
 function modeCfg(mode) { return DISPLAY_MODES[mode] || DISPLAY_MODES.normal; }
 
 // Pure (unit-tested): the set of assistant-text items that are the LAST assistant
-// message of their turn — i.e. that turn's final answer. A user prompt starts a
-// turn; the last assistant item before the next prompt (or the end) is its final
-// answer. Focus mode keeps these expanded and folds the rest as reasoning.
+// message of their turn — that turn's final answer. A user prompt starts a turn;
+// the last assistant item before the next prompt (or the end) is its final answer.
+// Focus keeps these and hides the rest of the intermediate prose.
 function finalAnswerItems(items) {
   const finals = new Set();
   let lastAsst = null;
@@ -61,12 +65,18 @@ function finalAnswerItems(items) {
   return finals;
 }
 
-// First non-empty line of a block, truncated — the summary shown for a folded
-// (focus-mode) reasoning message.
-function firstLine(s) {
-  s = String(s == null ? '' : s).trim();
-  const nl = s.indexOf('\n');
-  return truncate(nl >= 0 ? s.slice(0, nl) : s, 100);
+// Pure (unit-tested): drop the items a mode hides, before grouping/rendering. Focus
+// keeps only each turn's final answer (intermediate prose gone) and drops thinking;
+// with the separating prose removed, a turn's tool calls become adjacent and merge
+// into one per-turn summary group. Modes that show everything return the list as-is.
+function filterItemsForMode(items, cfg, finals) {
+  if (cfg.prose === 'all' && !cfg.dropThinking) return items || [];
+  return (items || []).filter((it) => {
+    if (!it) return false;
+    if (it.kind === 'thinking') return !cfg.dropThinking;
+    if (it.kind === 'assistant') return cfg.prose === 'all' || finals.has(it);
+    return true; // user / tool / todos always kept
+  });
 }
 
 function renderStatus(el, model) {
@@ -99,35 +109,19 @@ function wireDetails(details, key, openKeys) {
   });
 }
 
-function itemEl(it, openKeys, cfg = DISPLAY_MODES.normal, foldAssistant = false) {
+function itemEl(it, openKeys, cfg = DISPLAY_MODES.normal) {
   const div = document.createElement('div');
   if (it.kind === 'user') {
     div.className = 'gui-user';
     div.textContent = it.text;
   } else if (it.kind === 'assistant') {
+    // Claude's prose renders as full markdown in every mode; focus hides its
+    // intermediate prose by dropping the item upstream, so whatever reaches here is
+    // meant to be shown. renderMarkdown is XSS-safe (escapes first); fall back to
+    // plain text if the module somehow didn't load.
     div.className = 'gui-asst';
-    if (foldAssistant) {
-      // Focus mode: collapse intermediate reasoning into a foldable one-liner; the
-      // turn's final answer is rendered normally (not folded) by the caller.
-      div.classList.add('gui-asst-folded');
-      const details = document.createElement('details');
-      const summary = document.createElement('summary');
-      summary.className = 'gui-asst-sum';
-      summary.textContent = firstLine(it.text);
-      const body = document.createElement('div');
-      body.className = 'gui-asst-body';
-      if (window.renderMarkdown) body.innerHTML = window.renderMarkdown(it.text);
-      else body.textContent = it.text;
-      details.append(summary, body);
-      div.appendChild(details);
-      wireDetails(details, 'asst:' + firstLine(it.text), openKeys);
-    } else if (window.renderMarkdown) {
-      // Render Claude's markdown (H8). renderMarkdown is XSS-safe (escapes first);
-      // fall back to plain text if the module somehow didn't load.
-      div.innerHTML = window.renderMarkdown(it.text);
-    } else {
-      div.textContent = it.text;
-    }
+    if (window.renderMarkdown) div.innerHTML = window.renderMarkdown(it.text);
+    else div.textContent = it.text;
   } else if (it.kind === 'thinking') {
     div.className = 'gui-think';
     div.innerHTML = `<details${cfg.openThinking ? ' open' : ''}><summary>thinking</summary><div></div></details>`;
@@ -212,18 +206,15 @@ function renderLog(el, model, openKeys, mode) {
   const cfg = modeCfg(mode);
   const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   el.innerHTML = '';
-  const items = (model && model.items) || [];
-  // In focus mode, keep each turn's final answer expanded and fold the rest.
-  const finals = cfg.foldReasoning ? finalAnswerItems(items) : null;
+  const rawItems = (model && model.items) || [];
+  // Compute turn structure on the FULL list (so boundaries stay intact), then drop
+  // what the mode hides. In focus this removes intermediate prose + thinking, which
+  // makes a turn's tools adjacent so they merge into one per-turn summary group.
+  const finals = finalAnswerItems(rawItems);
+  const items = filterItemsForMode(rawItems, cfg, finals);
   const frag = document.createDocumentFragment();
   for (const seg of groupConsecutiveTools(items, cfg.groupThreshold)) {
-    if (seg.type === 'group') {
-      frag.appendChild(toolGroupEl(seg.items, openKeys, cfg));
-    } else {
-      const it = seg.item;
-      const fold = !!(cfg.foldReasoning && it && it.kind === 'assistant' && finals && !finals.has(it));
-      frag.appendChild(itemEl(it, openKeys, cfg, fold));
-    }
+    frag.appendChild(seg.type === 'group' ? toolGroupEl(seg.items, openKeys, cfg) : itemEl(seg.item, openKeys, cfg));
   }
   el.appendChild(frag);
   if (atBottom) el.scrollTop = el.scrollHeight;
@@ -558,5 +549,5 @@ function renderGuiModel(container, model) {
 
 // Dual export (same pattern as compose.js): browser gets globals; node --test can
 // require the pure helpers (groupConsecutiveTools) without a DOM.
-if (typeof module !== 'undefined' && module.exports) module.exports = { groupConsecutiveTools, finalAnswerItems, DISPLAY_MODES, modeCfg };
+if (typeof module !== 'undefined' && module.exports) module.exports = { groupConsecutiveTools, finalAnswerItems, filterItemsForMode, DISPLAY_MODES, modeCfg };
 if (typeof window !== 'undefined') { window.mountGui = mountGui; window.renderGuiModel = renderGuiModel; }

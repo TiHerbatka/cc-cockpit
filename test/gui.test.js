@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { groupConsecutiveTools, finalAnswerItems, modeCfg, DISPLAY_MODES } = require('../public/gui');
+const { groupConsecutiveTools, finalAnswerItems, filterItemsForMode, modeCfg, DISPLAY_MODES } = require('../public/gui');
 
 const tool = (id) => ({ kind: 'tool', id, name: 'Bash', status: 'ok' });
 const user = (text) => ({ kind: 'user', text });
@@ -56,10 +56,42 @@ test('groupConsecutiveTools: threshold Infinity never groups (verbose mode)', ()
 
 test('modeCfg: known modes + fallback to normal', () => {
   assert.strictEqual(modeCfg('focus'), DISPLAY_MODES.focus);
+  assert.strictEqual(modeCfg('focus+'), DISPLAY_MODES['focus+']);
   assert.strictEqual(modeCfg('verbose'), DISPLAY_MODES.verbose);
   assert.strictEqual(modeCfg('normal'), DISPLAY_MODES.normal);
   assert.strictEqual(modeCfg(undefined), DISPLAY_MODES.normal);
   assert.strictEqual(modeCfg('bogus'), DISPLAY_MODES.normal);
+});
+
+const thinking = (text) => ({ kind: 'thinking', text });
+
+test('filterItemsForMode: focus hides intermediate prose + thinking, keeps final answers, tools, prompts', () => {
+  const u1 = user('q1'), a1 = asst('reasoning'), th = thinking('hmm'), t1 = tool(1), aF = asst('final 1');
+  const u2 = user('q2'), a2 = asst('final 2');
+  const items = [u1, a1, th, t1, aF, u2, a2];
+  const finals = finalAnswerItems(items); // aF, a2
+  const out = filterItemsForMode(items, DISPLAY_MODES.focus, finals);
+  // intermediate prose a1 and thinking th are dropped; the rest stay in order
+  assert.deepEqual(out, [u1, t1, aF, u2, a2]);
+});
+
+test('filterItemsForMode: focus makes a turn\'s tools adjacent so they merge into one group', () => {
+  // tool, prose, tool within one turn -> after focus filtering the two tools are
+  // adjacent and group together (per-turn summary).
+  const items = [user('q'), tool(1), asst('mid'), tool(2), asst('final')];
+  const finals = finalAnswerItems(items);
+  const filtered = filterItemsForMode(items, DISPLAY_MODES.focus, finals);
+  const segs = groupConsecutiveTools(filtered, DISPLAY_MODES.focus.groupThreshold);
+  const group = segs.find((s) => s.type === 'group');
+  assert.ok(group && group.items.length === 2); // both tools merged
+});
+
+test('filterItemsForMode: focus+/normal/verbose keep every item (same list)', () => {
+  const items = [user('q'), asst('p1'), thinking('x'), tool(1), asst('final')];
+  const finals = finalAnswerItems(items);
+  for (const m of ['focus+', 'normal', 'verbose']) {
+    assert.strictEqual(filterItemsForMode(items, DISPLAY_MODES[m], finals), items);
+  }
 });
 
 test('finalAnswerItems: last assistant of each turn is the final answer', () => {

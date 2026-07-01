@@ -96,12 +96,12 @@ Entries are `MECH-<slug>`. Conventions (format, handles, freshness): see [README
 **Key facts:**
 - Two settings in the user's Claude settings file drive it: `viewMode: "focus"` (the `/focus` quiet view) and `verbose: true` (full turn-by-turn output). Read best-effort — a missing/malformed file or absent keys degrades to `normal`.
 - Precedence is Claude's own, documented one: **`verbose` overrides `viewMode`** (the CLI reference states `--verbose` "Overrides the viewMode setting"). Derived mode = `verbose ? 'verbose' : viewMode === 'focus' ? 'focus' : 'normal'`.
-- `focus` folds each turn's reasoning (intermediate assistant prose + thinking) and tool activity, keeping your prompts and each turn's final answer; `verbose` expands tool input/output; `normal` is the default rendering. The client seeds from this and offers a manual override.
+- The client turns the derived mode into a render detail level (see FEAT-display-mode): `focus` hides intermediate prose + thinking and collapses each turn's tools into one per-turn summary (matching the terminal), `verbose` expands everything, `normal` is the default; the client also offers a fourth, cockpit-only `focus+` (focus's tool handling but keeps Claude's prose) via manual override. The client renders these by filtering the item list per mode before grouping — hiding intermediate prose makes a turn's tool calls adjacent so they merge into one group.
 - `viewMode` is an **undocumented** settings key, so it is treated as best-effort. v1 reads the user-level settings file only (the tier merge across project/local settings is a later refinement).
 
-**Area:** the Claude-settings reader and the per-connection display-mode message on the WebSocket bridge.
+**Area:** the Claude-settings reader, the per-connection display-mode message on the WebSocket bridge, and the client's per-mode item filtering + grouping in the conversation render.
 
-**Last verified: 2026-07-01**
+**Last verified: 2026-07-02**
 
 ### MECH-session-registry — In-memory session registry
 

@@ -161,13 +161,6 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .gui-asst .md-table th, .gui-asst .md-table td { border: 1px solid #3a3a3a; padding: 3px 8px; }
 .gui-asst .md-table th { background: #2a2a2a; color: #e6e6e6; font-weight: 600; text-align: left; }
 .gui-asst .md-table tr:nth-child(even) td { background: #232323; }
-/* Focus mode (J4): intermediate reasoning collapses to a foldable one-liner. */
-.gui-asst-folded > details > summary.gui-asst-sum { cursor: pointer; color: #8a8a8a; font-size: 12px; list-style: none; padding: 1px 0; }
-.gui-asst-folded > details > summary.gui-asst-sum::-webkit-details-marker { display: none; }
-.gui-asst-folded > details > summary.gui-asst-sum::before { content: '▸ '; color: #666; }
-.gui-asst-folded > details[open] > summary.gui-asst-sum { color: #ddd; }
-.gui-asst-folded > details[open] > summary.gui-asst-sum::before { content: '▾ '; }
-.gui-asst-body { margin-top: 4px; }
 .gui-think { color: #888; font-style: italic; }
 .gui-think summary { cursor: pointer; }
 .gui-think div { white-space: pre-wrap; margin: 4px 0 0 12px; }
