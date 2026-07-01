@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { groupConsecutiveTools, finalAnswerItems, filterItemsForMode, modeCfg, DISPLAY_MODES } = require('../public/gui');
+const { groupConsecutiveTools, groupToolsPerTurn, finalAnswerItems, filterItemsForMode, modeCfg, DISPLAY_MODES } = require('../public/gui');
 
 const tool = (id) => ({ kind: 'tool', id, name: 'Bash', status: 'ok' });
 const user = (text) => ({ kind: 'user', text });
@@ -54,6 +54,33 @@ test('groupConsecutiveTools: threshold Infinity never groups (verbose mode)', ()
   assert.deepEqual(segs.map((s) => s.type), ['item', 'item', 'item', 'item']);
 });
 
+test('groupToolsPerTurn: a turn\'s tools merge into one group even across prose (focus+)', () => {
+  const u = user('q'), t1 = tool(1), m = asst('mid'), t2 = tool(2), f = asst('final');
+  const segs = groupToolsPerTurn([u, t1, m, t2, f]);
+  // group is placed at the first tool's position; prose stays in order after it
+  assert.deepEqual(segs.map((s) => s.type), ['item', 'group', 'item', 'item']);
+  assert.equal(segs[1].items.length, 2);           // both tools in one group
+  assert.deepEqual(segs[0].item, u);
+  assert.deepEqual(segs[2].item, m);
+  assert.deepEqual(segs[3].item, f);
+});
+
+test('groupToolsPerTurn: exactly one tool group per turn', () => {
+  const segs = groupToolsPerTurn([user('q1'), tool(1), tool(2), asst('a1'), user('q2'), tool(3), asst('a2')]);
+  const groups = segs.filter((s) => s.type === 'group');
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].items.length, 2);
+  assert.equal(groups[1].items.length, 1);
+});
+
+test('groupToolsPerTurn: tools before the first prompt still group; no-tool input passes through', () => {
+  const a = groupToolsPerTurn([tool(1), tool(2), user('q')]);
+  assert.equal(a[0].type, 'group');
+  assert.equal(a[0].items.length, 2);
+  assert.deepEqual(a[1].item, user('q'));
+  assert.deepEqual(groupToolsPerTurn([user('q'), asst('a')]).map((s) => s.type), ['item', 'item']);
+});
+
 test('modeCfg: known modes + fallback to normal', () => {
   assert.strictEqual(modeCfg('focus'), DISPLAY_MODES.focus);
   assert.strictEqual(modeCfg('focus+'), DISPLAY_MODES['focus+']);
@@ -75,15 +102,16 @@ test('filterItemsForMode: focus hides intermediate prose + thinking, keeps final
   assert.deepEqual(out, [u1, t1, aF, u2, a2]);
 });
 
-test('filterItemsForMode: focus makes a turn\'s tools adjacent so they merge into one group', () => {
-  // tool, prose, tool within one turn -> after focus filtering the two tools are
-  // adjacent and group together (per-turn summary).
+test('focus pipeline: filter drops intermediate prose, then tools aggregate to one turn group', () => {
+  // tool, prose, tool within one turn -> focus hides the intermediate prose and
+  // groupToolsPerTurn merges the two tools into a single per-turn summary.
   const items = [user('q'), tool(1), asst('mid'), tool(2), asst('final')];
   const finals = finalAnswerItems(items);
   const filtered = filterItemsForMode(items, DISPLAY_MODES.focus, finals);
-  const segs = groupConsecutiveTools(filtered, DISPLAY_MODES.focus.groupThreshold);
-  const group = segs.find((s) => s.type === 'group');
-  assert.ok(group && group.items.length === 2); // both tools merged
+  const segs = groupToolsPerTurn(filtered);
+  const groups = segs.filter((s) => s.type === 'group');
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].items.length, 2);
 });
 
 test('filterItemsForMode: focus+/normal/verbose keep every item (same list)', () => {

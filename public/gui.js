@@ -33,17 +33,19 @@ const TODO_GLYPH = { completed: '✓', in_progress: '▸', pending: '○', cance
 // from the user's Claude viewMode/verbose. Each mode is a small config the renderer
 // reads. The two "focus" modes match the terminal by HIDING intermediate detail
 // (not folding it); focus+ is a cockpit-only variant that keeps Claude's prose.
-//   groupThreshold — collapse a run of >= N consecutive tools into one summary group
-//                    (1 folds every run; with intermediate prose hidden, a turn's
-//                    tools merge into one per-turn summary; Infinity never groups)
+//   groupThreshold — (normal/verbose) collapse a run of >= N consecutive tools into
+//                    one summary group (3 = runs of 3+ group; Infinity = never group)
+//   toolsPerTurn   — (focus/focus+) collapse ALL of a turn's tools into ONE per-turn
+//                    summary group, even across intervening prose — so focus+ shows
+//                    one quiet tool line per turn, not one group per consecutive run
 //   openTools      — render tool cards with their input/output expanded
 //   openThinking   — render thinking blocks expanded
 //   dropThinking   — remove thinking blocks entirely
 //   prose          — 'all' shows every assistant message; 'final' shows only each
 //                    turn's final answer (intermediate prose hidden, terminal focus)
 const DISPLAY_MODES = {
-  focus:    { groupThreshold: 1,        openTools: false, openThinking: false, dropThinking: true,  prose: 'final' },
-  'focus+': { groupThreshold: 1,        openTools: false, openThinking: false, dropThinking: false, prose: 'all' },
+  focus:    { toolsPerTurn: true,       openTools: false, openThinking: false, dropThinking: true,  prose: 'final' },
+  'focus+': { toolsPerTurn: true,       openTools: false, openThinking: false, dropThinking: false, prose: 'all' },
   normal:   { groupThreshold: 3,        openTools: false, openThinking: false, dropThinking: false, prose: 'all' },
   verbose:  { groupThreshold: Infinity, openTools: true,  openThinking: true,  dropThinking: false, prose: 'all' },
 };
@@ -175,6 +177,32 @@ function groupConsecutiveTools(items, threshold = 3) {
   return out;
 }
 
+// A7 (pure, unit-tested): per-turn tool aggregation for focus / focus+. Collapses
+// ALL of a turn's tool calls into ONE group placed where the turn's first tool
+// occurred, keeping prompts and prose in order. Unlike groupConsecutiveTools, it
+// merges a turn's tools even when prose sits between them — so focus+ renders one
+// quiet tool summary per turn instead of many per-run groups (which read like
+// normal). A turn starts at a user item. Returns the same segment shape.
+function groupToolsPerTurn(items) {
+  const arr = items || [];
+  const out = [];
+  let tools = [];
+  let insertAt = -1; // index in `out` where this turn's tool group belongs
+  const flush = () => {
+    if (tools.length) out.splice(insertAt, 0, { type: 'group', items: tools });
+    tools = [];
+    insertAt = -1;
+  };
+  for (const it of arr) {
+    if (!it) continue;
+    if (it.kind === 'user') { flush(); out.push({ type: 'item', item: it }); }
+    else if (it.kind === 'tool') { if (insertAt === -1) insertAt = out.length; tools.push(it); }
+    else out.push({ type: 'item', item: it });
+  }
+  flush();
+  return out;
+}
+
 // A7: a run of 3+ back-to-back tool cards collapses into one group. The group is
 // collapsed by default; expanding it reveals the individual tool cards, each still
 // its own expandable card. The left border reflects the worst status in the run
@@ -212,8 +240,11 @@ function renderLog(el, model, openKeys, mode) {
   // makes a turn's tools adjacent so they merge into one per-turn summary group.
   const finals = finalAnswerItems(rawItems);
   const items = filterItemsForMode(rawItems, cfg, finals);
+  // focus / focus+ aggregate a whole turn's tools into one summary; normal / verbose
+  // group only consecutive runs (threshold).
+  const segments = cfg.toolsPerTurn ? groupToolsPerTurn(items) : groupConsecutiveTools(items, cfg.groupThreshold);
   const frag = document.createDocumentFragment();
-  for (const seg of groupConsecutiveTools(items, cfg.groupThreshold)) {
+  for (const seg of segments) {
     frag.appendChild(seg.type === 'group' ? toolGroupEl(seg.items, openKeys, cfg) : itemEl(seg.item, openKeys, cfg));
   }
   el.appendChild(frag);
@@ -549,5 +580,5 @@ function renderGuiModel(container, model) {
 
 // Dual export (same pattern as compose.js): browser gets globals; node --test can
 // require the pure helpers (groupConsecutiveTools) without a DOM.
-if (typeof module !== 'undefined' && module.exports) module.exports = { groupConsecutiveTools, finalAnswerItems, filterItemsForMode, DISPLAY_MODES, modeCfg };
+if (typeof module !== 'undefined' && module.exports) module.exports = { groupConsecutiveTools, groupToolsPerTurn, finalAnswerItems, filterItemsForMode, DISPLAY_MODES, modeCfg };
 if (typeof window !== 'undefined') { window.mountGui = mountGui; window.renderGuiModel = renderGuiModel; }
