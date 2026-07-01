@@ -50,7 +50,7 @@ The GUI glossary + visual map is generated documentation — [`docs/gui-map.md`]
 
 - Node.js v22+ (this machine has v24).
 - The **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) installs from npm and bundles its own version-pinned `claude` binary (spawned over stdio) — there is no native module to compile. Verify with `node -e "require('@anthropic-ai/claude-agent-sdk'); console.log('ok')"`.
-- The `test` script is `node --test --test-force-exit`. The `--test-force-exit` flag is kept defensively: a test that loads the real SDK (the contract smoke test) can leave an async handle alive on Windows, which would otherwise keep the test-runner process from exiting. The suite itself passes without it; the flag just guarantees a clean exit. App behavior is unaffected (the server is long-lived by design).
+- The `test` script is `node --test --test-force-exit --test-timeout=30000`. The `--test-force-exit` flag is kept defensively: a test that loads the real SDK (the contract smoke test) can leave an async handle alive on Windows, which would otherwise keep the test-runner process from exiting. The suite itself passes without it; the flag just guarantees a clean exit. App behavior is unaffected (the server is long-lived by design). `--test-timeout=30000` is a safety net: node's runner has no default per-test timeout, so a test that awaits a promise which never resolves (e.g. a WebSocket message missed by a race) would otherwise hang the whole run indefinitely — the timeout fails that one test instead.
 
 ## Non-goals for v0 — do NOT build these
 
