@@ -129,3 +129,11 @@ Built on `feat/gui-mode` this session:
 - [x] J6. [feature] Copy session id + overflow menu. Add an easy way to copy the focused session's ccSessionId, via an expandable kebab/overflow menu that also hosts future rarely-used actions — one low-clutter place to grow into as more such actions are added.
 - [x] J7. [bug/fixed] Fenced code blocks (.md-code) did not wrap - white-space:pre made skill output echoed as a code block scroll horizontally while every other message/tool block wraps (pre-wrap/word-break). Confirmed live via Playwright (only overflowing element). Fixed: .md-code now white-space:pre-wrap + word-break:break-word (indentation preserved, long lines wrap).
 - [x] J8. [bug] focus+ renders like normal: it only grouped tools per-run (threshold 1) vs normal's threshold 3, so tools still appeared as many small collapsed groups scattered through the turn - visually near-identical to normal. Fix: aggregate ALL of a turn's tools into ONE per-turn summary in focus AND focus+ (new groupToolsPerTurn), so focus+ = all prose + one quiet tool line per turn, clearly distinct from normal's browsable cards.
+
+## K. Settings
+- [ ] K1. Settings source: let the user choose which settings the cockpit loads.
+  - [ ] K1.1. Option: load ALL of the user's global Claude settings.
+  - [ ] K1.2. Option: load only the settings cc-cockpit reads from its own profile.
+- [ ] K2. In-app settings screen: let the user open settings and change them there.
+  - [ ] K2.1. Expose ALL params affecting the frontend / cc-cockpit behavior (from the user's perspective) in it.
+  - [ ] K2.2. Search within settings.
