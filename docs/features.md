@@ -164,14 +164,14 @@ Entries are `FEAT-<slug>`. Conventions (format, handles, freshness): see [README
 
 **Key facts:**
 - Handles four kinds: tool-permission, AskUserQuestion, plan review, and MCP elicitation.
-- Permission requests show the tool and its input with Allow once / Allow, don't ask again / Deny.
+- Permission requests show the tool and its input human-readably — the command for a shell tool, the file path (and replace/with strings for an edit) for a file tool, the pattern for a search, otherwise a tidy labeled key/value list — with the full raw JSON kept in a collapsed "Raw input" details for fidelity. Actions: Allow once / Allow, don't ask again / Deny.
 - Plan review shows the plan text with Approve / Approve & auto-accept edits / Keep planning.
 - AskUserQuestion shows each question's options (single- or multi-select) with a Submit button; MCP elicitation shows the requested fields (or a link) with Submit / Decline.
 - The modal overlays only the conversation pane — the sidebar stays usable — and a pending request is re-shown if you switch away and back to that session.
 
 **Area:** the interaction modal in the web client and the SDK control channel.
 
-**Last verified: 2026-06-29**
+**Last verified: 2026-07-01**
 
 ### FEAT-usage-chip — Usage chip
 

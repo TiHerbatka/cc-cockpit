@@ -36,6 +36,15 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .interaction-head { color: #9cdcfe; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
 .interaction-sub { color: #ddd; font-size: 13px; margin-bottom: 8px; }
 .interaction-input { background: #1e1e1e; border: 1px solid #3c3c3c; border-radius: 4px; padding: 8px; font-size: 12px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+/* J2: human-readable permission body — labeled rows, raw JSON tucked in a details. */
+.perm-input { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.perm-row { display: flex; flex-direction: column; gap: 2px; }
+.perm-label { color: #9cdcfe; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.perm-value { color: #ddd; font-size: 13px; word-break: break-word; }
+.perm-value.mono { background: #1e1e1e; border: 1px solid #3c3c3c; border-radius: 4px; padding: 6px 8px; margin: 0; font-family: inherit; font-size: 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; }
+.perm-raw { margin-top: 2px; }
+.perm-raw > summary { color: #888; font-size: 11px; cursor: pointer; }
+.perm-raw > .interaction-input { margin-top: 6px; }
 .interaction-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .interaction-actions button { padding: 6px 12px; border-radius: 4px; border: 1px solid #3c3c3c; cursor: pointer; font-size: 12px; }
 .btn-allow { background: #2d4a2d; color: #cfe9cf; border-color: #3a5a3a; }

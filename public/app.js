@@ -937,15 +937,63 @@ function interactionActions(buttons) {
   return row;
 }
 
+// Render a tool-permission request's input human-readably instead of a raw JSON
+// blob (J2): the command for a shell tool, the path (and diff) for a file tool,
+// the pattern for a search, else a tidy key/value list — with the full JSON kept
+// in a collapsed <details> for fidelity.
+function renderPermissionInput(req) {
+  const wrap = document.createElement('div'); wrap.className = 'perm-input';
+  const input = (req && req.input && typeof req.input === 'object') ? req.input : {};
+  const name = req && req.toolName;
+  const rows = []; // [label, value, mono]
+  const val = (s) => (s == null ? '' : String(s));
+  const add = (label, value, mono) => rows.push([label, value, mono]);
+
+  if (name === 'Bash' || name === 'PowerShell') {
+    add('Command', val(input.command), true);
+    if (input.description) add('What it does', val(input.description), false);
+  } else if (name === 'Read' || name === 'Write') {
+    add('File', val(input.file_path), true);
+  } else if (name === 'Edit') {
+    add('File', val(input.file_path), true);
+    if (input.old_string != null) add('Replace', val(input.old_string), true);
+    if (input.new_string != null) add('With', val(input.new_string), true);
+  } else if (name === 'Glob' || name === 'Grep') {
+    add('Pattern', val(input.pattern), true);
+    if (input.path) add('In', val(input.path), true);
+    if (input.glob) add('Filter', val(input.glob), true);
+  } else {
+    for (const [k, v] of Object.entries(input)) {
+      const obj = v !== null && typeof v === 'object';
+      add(k, obj ? JSON.stringify(v) : val(v), obj);
+    }
+  }
+  if (!rows.length) add('(no input)', '', false);
+
+  for (const [label, value, mono] of rows) {
+    const row = document.createElement('div'); row.className = 'perm-row';
+    const l = document.createElement('span'); l.className = 'perm-label'; l.textContent = label;
+    const v = document.createElement(mono ? 'pre' : 'span');
+    v.className = 'perm-value' + (mono ? ' mono' : ''); v.textContent = value;
+    row.append(l, v); wrap.appendChild(row);
+  }
+  // Keep the full JSON available but collapsed, so nothing is hidden from the user.
+  if (Object.keys(input).length) {
+    const det = document.createElement('details'); det.className = 'perm-raw';
+    const sum = document.createElement('summary'); sum.textContent = 'Raw input';
+    const pre = document.createElement('pre'); pre.className = 'interaction-input'; pre.textContent = JSON.stringify(req.input, null, 2);
+    det.append(sum, pre); wrap.appendChild(det);
+  }
+  return wrap;
+}
+
 function buildInteractionBody(card, req) {
   const head = document.createElement('div'); head.className = 'interaction-head';
   if (req.kind === 'permission') {
     head.textContent = 'Permission requested';
     const sub = document.createElement('div'); sub.className = 'interaction-sub';
     sub.textContent = req.toolName ? `Claude wants to use ${req.toolName}` : 'Claude is requesting permission';
-    const pre = document.createElement('pre'); pre.className = 'interaction-input';
-    pre.textContent = req.input == null ? '' : JSON.stringify(req.input, null, 2);
-    card.append(head, sub, pre, interactionActions([
+    card.append(head, sub, renderPermissionInput(req), interactionActions([
       ['Allow once', 'btn-allow', () => answerInteraction('allow')],
       ["Allow, don't ask again", 'btn-allow2', () => answerInteraction('allow-always')],
       ['Deny', 'btn-deny', () => answerInteraction('deny')],
