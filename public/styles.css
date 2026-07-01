@@ -85,6 +85,9 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 
 /* GUI pane internals */
 .gui-status { flex: 0 0 auto; padding: 8px 12px; border-bottom: 1px solid #2a2a2a; font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+/* When empty (idle, nothing to summarize) the bar hides — its own padding+border
+   would otherwise leave a stray empty strip, so the flex display is overridden. */
+.gui-status[hidden] { display: none; }
 .gui-title { color: #9cdcfe; font-weight: 600; }
 .gui-current { color: #4ec9b0; }
 .gui-todoprog { color: #c08a3e; }

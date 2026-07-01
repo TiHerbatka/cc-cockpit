@@ -40,7 +40,11 @@ function renderStatus(el, model) {
     const done = st.todos.filter((t) => t.status === 'completed').length;
     bits.push(`<span class="gui-todoprog">todos ${done}/${st.todos.length}</span>`);
   }
-  el.innerHTML = bits.join('') || '<span class="gui-muted">waiting for activity…</span>';
+  // With nothing to show (no title, no running tool, no todos) hide the bar
+  // entirely rather than display a misleading "waiting for activity" line that
+  // reads as if Claude is stuck while it is actually idle (J1).
+  el.innerHTML = bits.join('');
+  el.hidden = bits.length === 0;
 }
 
 // Persist a <details>'s open/closed state across full re-renders. The log rebuilds
@@ -454,7 +458,7 @@ function mountGui(container, handlers) {
 
   return {
     update(model) { renderStatus(statusEl, model); renderLog(logEl, model, openKeys); },
-    clear() { statusEl.innerHTML = ''; logEl.innerHTML = ''; waitEl.hidden = true; closePastePopup(); openKeys.clear(); },
+    clear() { statusEl.innerHTML = ''; statusEl.hidden = true; logEl.innerHTML = ''; waitEl.hidden = true; closePastePopup(); openKeys.clear(); },
     focusCompose() { editor.focus(); },
     // Show/hide the "Waiting for Claude…" spinner shown between a send and Claude's
     // first output of the turn (H3). Driven by app.js's awaitingResponse logic.
