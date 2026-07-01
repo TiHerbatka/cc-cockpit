@@ -141,7 +141,7 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
 .gui-asst { color: #ddd; padding: 1px 0; word-break: break-word; font-size: 13px; line-height: 1.4; }
 .gui-asst .md-p { margin: 0 0 6px; }
 .gui-asst .md-p:last-child { margin-bottom: 0; }
-.gui-asst .md-h { margin: 8px 0 4px; font-size: 14px; color: #e6e6e6; line-height: 1.25; }
+.gui-asst .md-h { margin: 8px 0 4px; font-size: 14px; color: #fff; line-height: 1.25; }
 .gui-asst .md-list { margin: 4px 0; padding-left: 22px; }
 .gui-asst .md-list li { margin: 1px 0; }
 .gui-asst .md-quote { margin: 4px 0; padding: 2px 10px; border-left: 3px solid #4a4a50; color: #b0b0b0; }
@@ -149,7 +149,11 @@ body { display: flex; background: #1e1e1e; color: #ddd; }
    than scrolling horizontally, so skill output echoed as a code block doesn't
    overflow the width. Indentation is preserved (pre-wrap); only long lines wrap. */
 .gui-asst .md-code { margin: 6px 0; padding: 8px 10px; background: #1b1b1b; border: 1px solid #333; border-radius: 4px; overflow: auto; max-height: 360px; white-space: pre-wrap; word-break: break-word; font-family: Consolas, monospace; font-size: 12px; color: #d4d4d4; }
-.gui-asst .md-icode { background: #2a2a2a; border: 1px solid #333; border-radius: 3px; padding: 0 4px; font-family: Consolas, monospace; font-size: 12px; color: #d4d4d4; }
+.gui-asst .md-icode { background: rgba(255,255,255,0.07); border-radius: 3px; padding: 0 4px; font-family: Consolas, monospace; font-size: 12px; color: #9cdcfe; }
+/* Emphasis colored to match Claude's terminal rendering: bold is bright white,
+   inline code / links are the accent blue (above). Structure was already handled
+   (H8); this is the color layer that was missing. */
+.gui-asst strong { color: #fff; font-weight: 600; }
 .gui-asst a { color: #9cdcfe; }
 .gui-asst hr { border: none; border-top: 1px solid #3a3a3a; margin: 8px 0; }
 .gui-asst .md-list .md-list { margin: 0; } /* tighten nested lists (H8) */
